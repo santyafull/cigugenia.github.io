@@ -15697,6 +15697,650 @@ cr.plugins_.Audio = function(runtime)
 }());
 ;
 ;
+cr.plugins_.Browser = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Browser.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+		var self = this;
+		window.addEventListener("resize", function () {
+			self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnResize, self);
+		});
+		if (typeof navigator.onLine !== "undefined")
+		{
+			window.addEventListener("online", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOnline, self);
+			});
+			window.addEventListener("offline", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOffline, self);
+			});
+		}
+		if (typeof window.applicationCache !== "undefined")
+		{
+			window.applicationCache.addEventListener('updateready', function() {
+				self.runtime.loadingprogress = 1;
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateReady, self);
+			});
+			window.applicationCache.addEventListener('progress', function(e) {
+				self.runtime.loadingprogress = e["loaded"] / e["total"];
+			});
+		}
+		if (!this.runtime.isDirectCanvas)
+		{
+			document.addEventListener("appMobi.device.update.available", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateReady, self);
+			});
+			document.addEventListener("backbutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+			});
+			document.addEventListener("menubutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnMenuButton, self);
+			});
+			document.addEventListener("searchbutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnSearchButton, self);
+			});
+			document.addEventListener("tizenhwkey", function (e) {
+				var ret;
+				switch (e["keyName"]) {
+				case "back":
+					ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+					if (!ret)
+					{
+						if (window["tizen"])
+							window["tizen"]["application"]["getCurrentApplication"]()["exit"]();
+					}
+					break;
+				case "menu":
+					ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnMenuButton, self);
+					if (!ret)
+						e.preventDefault();
+					break;
+				}
+			});
+		}
+		if (this.runtime.isWindowsPhone81)
+		{
+			WinJS["Application"]["onbackclick"] = function (e)
+			{
+				return !!self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+			};
+		}
+		this.runtime.addSuspendCallback(function(s) {
+			if (s)
+			{
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnPageHidden, self);
+			}
+			else
+			{
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnPageVisible, self);
+			}
+		});
+		this.is_arcade = (typeof window["is_scirra_arcade"] !== "undefined");
+	};
+	function Cnds() {};
+	Cnds.prototype.CookiesEnabled = function()
+	{
+		return navigator ? navigator.cookieEnabled : false;
+	};
+	Cnds.prototype.IsOnline = function()
+	{
+		return navigator ? navigator.onLine : false;
+	};
+	Cnds.prototype.HasJava = function()
+	{
+		return navigator ? navigator.javaEnabled() : false;
+	};
+	Cnds.prototype.OnOnline = function()
+	{
+		return true;
+	};
+	Cnds.prototype.OnOffline = function()
+	{
+		return true;
+	};
+	Cnds.prototype.IsDownloadingUpdate = function ()
+	{
+		if (typeof window["applicationCache"] === "undefined")
+			return false;
+		else
+			return window["applicationCache"]["status"] === window["applicationCache"]["DOWNLOADING"];
+	};
+	Cnds.prototype.OnUpdateReady = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.PageVisible = function ()
+	{
+		return !this.runtime.isSuspended;
+	};
+	Cnds.prototype.OnPageVisible = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnPageHidden = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnResize = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsFullscreen = function ()
+	{
+		return !!(document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || this.runtime.isNodeFullscreen);
+	};
+	Cnds.prototype.OnBackButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnMenuButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnSearchButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsMetered = function ()
+	{
+		var connection = navigator["connection"] || navigator["mozConnection"] || navigator["webkitConnection"];
+		if (!connection)
+			return false;
+		return connection["metered"];
+	};
+	Cnds.prototype.IsCharging = function ()
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (!battery)
+			return true;
+		return battery["charging"];
+	};
+	Cnds.prototype.IsPortraitLandscape = function (p)
+	{
+		var current = (window.innerWidth <= window.innerHeight ? 0 : 1);
+		return current === p;
+	};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.Alert = function (msg)
+	{
+		if (!this.runtime.isDomFree)
+			alert(msg.toString());
+	};
+	Acts.prototype.Close = function ()
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["forceToFinish"]();
+		else if (window["tizen"])
+			window["tizen"]["application"]["getCurrentApplication"]()["exit"]();
+		else if (navigator["app"] && navigator["app"]["exitApp"])
+			navigator["app"]["exitApp"]();
+		else if (navigator["device"] && navigator["device"]["exitApp"])
+			navigator["device"]["exitApp"]();
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.close();
+	};
+	Acts.prototype.Focus = function ()
+	{
+		if (this.runtime.isNodeWebkit)
+		{
+			var win = window["nwgui"]["Window"]["get"]();
+			win["focus"]();
+		}
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.focus();
+	};
+	Acts.prototype.Blur = function ()
+	{
+		if (this.runtime.isNodeWebkit)
+		{
+			var win = window["nwgui"]["Window"]["get"]();
+			win["blur"]();
+		}
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.blur();
+	};
+	Acts.prototype.GoBack = function ()
+	{
+		if (navigator["app"] && navigator["app"]["backHistory"])
+			navigator["app"]["backHistory"]();
+		else if (!this.is_arcade && !this.runtime.isDomFree && window.back)
+			window.back();
+	};
+	Acts.prototype.GoForward = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree && window.forward)
+			window.forward();
+	};
+	Acts.prototype.GoHome = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree && window.home)
+			window.home();
+	};
+	Acts.prototype.GoToURL = function (url, target)
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["openURL"](url);
+		else if (this.runtime.isEjecta)
+			ejecta["openURL"](url);
+		else if (this.runtime.isWinJS)
+			Windows["System"]["Launcher"]["launchUriAsync"](new Windows["Foundation"]["Uri"](url));
+		else if (navigator["app"] && navigator["app"]["loadUrl"])
+			navigator["app"]["loadUrl"](url, { "openExternal": true });
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+		{
+			if (target === 2 && !this.is_arcade)		// top
+				window.top.location = url;
+			else if (target === 1 && !this.is_arcade)	// parent
+				window.parent.location = url;
+			else					// self
+				window.location = url;
+		}
+	};
+	Acts.prototype.GoToURLWindow = function (url, tag)
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["openURL"](url);
+		else if (this.runtime.isEjecta)
+			ejecta["openURL"](url);
+		else if (this.runtime.isWinJS)
+			Windows["System"]["Launcher"]["launchUriAsync"](new Windows["Foundation"]["Uri"](url));
+		else if (navigator["app"] && navigator["app"]["loadUrl"])
+			navigator["app"]["loadUrl"](url, { "openExternal": true });
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.open(url, tag);
+	};
+	Acts.prototype.Reload = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree)
+			window.location.reload();
+	};
+	var firstRequestFullscreen = true;
+	var crruntime = null;
+	function onFullscreenError()
+	{
+		if (typeof jQuery !== "undefined")
+		{
+			crruntime["setSize"](jQuery(window).width(), jQuery(window).height());
+		}
+	};
+	Acts.prototype.RequestFullScreen = function (stretchmode)
+	{
+		if (this.runtime.isDomFree)
+		{
+			cr.logexport("[Construct 2] Requesting fullscreen is not supported on this platform - the request has been ignored");
+			return;
+		}
+		if (stretchmode >= 2)
+			stretchmode += 1;
+		if (stretchmode === 6)
+			stretchmode = 2;
+		if (this.runtime.isNodeWebkit)
+		{
+			if (!this.runtime.isNodeFullscreen)
+			{
+				window["nwgui"]["Window"]["get"]()["enterFullscreen"]();
+				this.runtime.isNodeFullscreen = true;
+				this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
+			}
+		}
+		else
+		{
+			if (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"])
+			{
+				return;
+			}
+			this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
+			var elem = this.runtime.canvasdiv || this.runtime.canvas;
+			if (firstRequestFullscreen)
+			{
+				firstRequestFullscreen = false;
+				crruntime = this.runtime;
+				elem.addEventListener("mozfullscreenerror", onFullscreenError);
+				elem.addEventListener("webkitfullscreenerror", onFullscreenError);
+				elem.addEventListener("msfullscreenerror", onFullscreenError);
+				elem.addEventListener("fullscreenerror", onFullscreenError);
+			}
+			if (!cr.is_undefined(elem["requestFullscreen"]))
+				elem["requestFullscreen"]();
+			else if (!cr.is_undefined(elem["webkitRequestFullScreen"]))
+			{
+				if (typeof Element !== "undefined" && typeof Element["ALLOW_KEYBOARD_INPUT"] !== "undefined")
+					elem["webkitRequestFullScreen"](Element["ALLOW_KEYBOARD_INPUT"]);
+				else
+					elem["webkitRequestFullScreen"]();
+			}
+			else if (!cr.is_undefined(elem["mozRequestFullScreen"]))
+				elem["mozRequestFullScreen"]();
+			else if (!cr.is_undefined(elem["msRequestFullscreen"]))
+				elem["msRequestFullscreen"]();
+		}
+	};
+	Acts.prototype.CancelFullScreen = function ()
+	{
+		if (this.runtime.isDomFree)
+		{
+			cr.logexport("[Construct 2] Exiting fullscreen is not supported on this platform - the request has been ignored");
+			return;
+		}
+		if (this.runtime.isNodeWebkit)
+		{
+			if (this.runtime.isNodeFullscreen)
+			{
+				window["nwgui"]["Window"]["get"]()["leaveFullscreen"]();
+				this.runtime.isNodeFullscreen = false;
+			}
+		}
+		else
+		{
+			if (!cr.is_undefined(document["exitFullscreen"]))
+				document["exitFullscreen"]();
+			else if (!cr.is_undefined(document["webkitCancelFullScreen"]))
+				document["webkitCancelFullScreen"]();
+			else if (!cr.is_undefined(document["mozCancelFullScreen"]))
+				document["mozCancelFullScreen"]();
+			else if (!cr.is_undefined(document["msExitFullscreen"]))
+				document["msExitFullscreen"]();
+		}
+	};
+	Acts.prototype.Vibrate = function (pattern_)
+	{
+		try {
+			var arr = pattern_.split(",");
+			var i, len;
+			for (i = 0, len = arr.length; i < len; i++)
+			{
+				arr[i] = parseInt(arr[i], 10);
+			}
+			if (navigator["vibrate"])
+				navigator["vibrate"](arr);
+			else if (navigator["mozVibrate"])
+				navigator["mozVibrate"](arr);
+			else if (navigator["webkitVibrate"])
+				navigator["webkitVibrate"](arr);
+			else if (navigator["msVibrate"])
+				navigator["msVibrate"](arr);
+		}
+		catch (e) {}
+	};
+	Acts.prototype.InvokeDownload = function (url_, filename_)
+	{
+		var a = document.createElement("a");
+		if (typeof a["download"] === "undefined")
+		{
+			window.open(url_);
+		}
+		else
+		{
+			var body = document.getElementsByTagName("body")[0];
+			a.textContent = filename_;
+			a.href = url_;
+			a["download"] = filename_;
+			body.appendChild(a);
+			var clickEvent = document.createEvent("MouseEvent");
+			clickEvent.initMouseEvent("click", true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
+			a.dispatchEvent(clickEvent);
+			body.removeChild(a);
+		}
+	};
+	Acts.prototype.InvokeDownloadString = function (str_, mimetype_, filename_)
+	{
+		var datauri = "data:" + mimetype_ + "," + encodeURIComponent(str_);
+		var a = document.createElement("a");
+		if (typeof a["download"] === "undefined")
+		{
+			window.open(datauri);
+		}
+		else
+		{
+			var body = document.getElementsByTagName("body")[0];
+			a.textContent = filename_;
+			a.href = datauri;
+			a["download"] = filename_;
+			body.appendChild(a);
+			var clickEvent = document.createEvent("MouseEvent");
+			clickEvent.initMouseEvent("click", true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
+			a.dispatchEvent(clickEvent);
+			body.removeChild(a);
+		}
+	};
+	Acts.prototype.ConsoleLog = function (type_, msg_)
+	{
+		if (typeof console === "undefined")
+			return;
+		if (type_ === 0 && console.log)
+			console.log(msg_.toString());
+		if (type_ === 1 && console.warn)
+			console.warn(msg_.toString());
+		if (type_ === 2 && console.error)
+			console.error(msg_.toString());
+	};
+	Acts.prototype.ConsoleGroup = function (name_)
+	{
+		if (console && console.group)
+			console.group(name_);
+	};
+	Acts.prototype.ConsoleGroupEnd = function ()
+	{
+		if (console && console.groupEnd)
+			console.groupEnd();
+	};
+	Acts.prototype.ExecJs = function (js_)
+	{
+		try {
+			if (eval)
+				eval(js_);
+		}
+		catch (e)
+		{
+			if (console && console.error)
+				console.error("Error executing Javascript: ", e);
+		}
+	};
+	var orientations = [
+		"portrait",
+		"landscape",
+		"portrait-primary",
+		"portrait-secondary",
+		"landscape-primary",
+		"landscape-secondary"
+	];
+	Acts.prototype.LockOrientation = function (o)
+	{
+		o = Math.floor(o);
+		if (o < 0 || o >= orientations.length)
+			return;
+		this.runtime.autoLockOrientation = false;
+		var orientation = orientations[o];
+		if (screen["lockOrientation"])
+			screen["lockOrientation"](orientation);
+		else if (screen["webkitLockOrientation"])
+			screen["webkitLockOrientation"](orientation);
+		else if (screen["mozLockOrientation"])
+			screen["mozLockOrientation"](orientation);
+		else if (screen["msLockOrientation"])
+			screen["msLockOrientation"](orientation);
+	};
+	Acts.prototype.UnlockOrientation = function ()
+	{
+		this.runtime.autoLockOrientation = false;
+		if (screen["unlockOrientation"])
+			screen["unlockOrientation"]();
+		else if (screen["webkitUnlockOrientation"])
+			screen["webkitUnlockOrientation"]();
+		else if (screen["mozUnlockOrientation"])
+			screen["mozUnlockOrientation"]();
+		else if (screen["msUnlockOrientation"])
+			screen["msUnlockOrientation"]();
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.URL = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.toString());
+	};
+	Exps.prototype.Protocol = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.protocol);
+	};
+	Exps.prototype.Domain = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.hostname);
+	};
+	Exps.prototype.PathName = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.pathname);
+	};
+	Exps.prototype.Hash = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.hash);
+	};
+	Exps.prototype.Referrer = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : document.referrer);
+	};
+	Exps.prototype.Title = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : document.title);
+	};
+	Exps.prototype.Name = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.appName);
+	};
+	Exps.prototype.Version = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.appVersion);
+	};
+	Exps.prototype.Language = function (ret)
+	{
+		if (navigator && navigator.language)
+			ret.set_string(navigator.language);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Platform = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.platform);
+	};
+	Exps.prototype.Product = function (ret)
+	{
+		if (navigator && navigator.product)
+			ret.set_string(navigator.product);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Vendor = function (ret)
+	{
+		if (navigator && navigator.vendor)
+			ret.set_string(navigator.vendor);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.UserAgent = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.userAgent);
+	};
+	Exps.prototype.QueryString = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.search);
+	};
+	Exps.prototype.QueryParam = function (ret, paramname)
+	{
+		if (this.runtime.isDomFree)
+		{
+			ret.set_string("");
+			return;
+		}
+		var match = RegExp('[?&]' + paramname + '=([^&]*)').exec(window.location.search);
+		if (match)
+			ret.set_string(decodeURIComponent(match[1].replace(/\+/g, ' ')));
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Bandwidth = function (ret)
+	{
+		var connection = navigator["connection"] || navigator["mozConnection"] || navigator["webkitConnection"];
+		if (!connection)
+			ret.set_float(Number.POSITIVE_INFINITY);
+		else
+			ret.set_float(connection["bandwidth"]);
+	};
+	Exps.prototype.BatteryLevel = function (ret)
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (!battery)
+			ret.set_float(1);
+		else
+			ret.set_float(battery["level"]);
+	};
+	Exps.prototype.BatteryTimeLeft = function (ret)
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (!battery)
+			ret.set_float(Number.POSITIVE_INFINITY);
+		else
+			ret.set_float(battery["dischargingTime"]);
+	};
+	Exps.prototype.ExecJS = function (ret, js_)
+	{
+		if (!eval)
+		{
+			ret.set_any(0);
+			return;
+		}
+		var result = 0;
+		try {
+			result = eval(js_);
+		}
+		catch (e)
+		{
+			if (console && console.error)
+				console.error("Error executing Javascript: ", e);
+		}
+		if (typeof result === "number")
+			ret.set_any(result);
+		else if (typeof result === "string")
+			ret.set_any(result);
+		else if (typeof result === "boolean")
+			ret.set_any(result ? 1 : 0);
+		else
+			ret.set_any(0);
+	};
+	Exps.prototype.ScreenWidth = function (ret)
+	{
+		ret.set_int(screen.width);
+	};
+	Exps.prototype.ScreenHeight = function (ret)
+	{
+		ret.set_int(screen.height);
+	};
+	Exps.prototype.DevicePixelRatio = function (ret)
+	{
+		ret.set_float(this.runtime.devicePixelRatio);
+	};
+	pluginProto.exps = new Exps();
+}());
+;
+;
 cr.plugins_.Keyboard = function(runtime)
 {
 	this.runtime = runtime;
@@ -17117,6 +17761,628 @@ cr.plugins_.Sprite = function(runtime)
 }());
 ;
 ;
+cr.plugins_.Text = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Text.prototype;
+	pluginProto.onCreate = function ()
+	{
+		pluginProto.acts.SetWidth = function (w)
+		{
+			if (this.width !== w)
+			{
+				this.width = w;
+				this.text_changed = true;	// also recalculate text wrapping
+				this.set_bbox_changed();
+			}
+		};
+	};
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	typeProto.onLostWebGLContext = function ()
+	{
+		if (this.is_family)
+			return;
+		var i, len, inst;
+		for (i = 0, len = this.instances.length; i < len; i++)
+		{
+			inst = this.instances[i];
+			inst.mycanvas = null;
+			inst.myctx = null;
+			inst.mytex = null;
+		}
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+		if (this.recycled)
+			this.lines.length = 0;
+		else
+			this.lines = [];		// for word wrapping
+		this.text_changed = true;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	var requestedWebFonts = {};		// already requested web fonts have an entry here
+	instanceProto.onCreate = function()
+	{
+		this.text = this.properties[0];
+		this.visible = (this.properties[1] === 0);		// 0=visible, 1=invisible
+		this.font = this.properties[2];
+		this.color = this.properties[3];
+		this.halign = this.properties[4];				// 0=left, 1=center, 2=right
+		this.valign = this.properties[5];				// 0=top, 1=center, 2=bottom
+		this.wrapbyword = (this.properties[7] === 0);	// 0=word, 1=character
+		this.lastwidth = this.width;
+		this.lastwrapwidth = this.width;
+		this.lastheight = this.height;
+		this.line_height_offset = this.properties[8];
+		this.facename = "";
+		this.fontstyle = "";
+		this.ptSize = 0;
+		this.textWidth = 0;
+		this.textHeight = 0;
+		this.parseFont();
+		this.mycanvas = null;
+		this.myctx = null;
+		this.mytex = null;
+		this.need_text_redraw = false;
+		this.last_render_tick = this.runtime.tickcount;
+		if (this.recycled)
+			this.rcTex.set(0, 0, 1, 1);
+		else
+			this.rcTex = new cr.rect(0, 0, 1, 1);
+		if (this.runtime.glwrap)
+			this.runtime.tickMe(this);
+;
+	};
+	instanceProto.parseFont = function ()
+	{
+		var arr = this.font.split(" ");
+		var i;
+		for (i = 0; i < arr.length; i++)
+		{
+			if (arr[i].substr(arr[i].length - 2, 2) === "pt")
+			{
+				this.ptSize = parseInt(arr[i].substr(0, arr[i].length - 2));
+				this.pxHeight = Math.ceil((this.ptSize / 72.0) * 96.0) + 4;	// assume 96dpi...
+				if (i > 0)
+					this.fontstyle = arr[i - 1];
+				this.facename = arr[i + 1];
+				for (i = i + 2; i < arr.length; i++)
+					this.facename += " " + arr[i];
+				break;
+			}
+		}
+	};
+	instanceProto.saveToJSON = function ()
+	{
+		return {
+			"t": this.text,
+			"f": this.font,
+			"c": this.color,
+			"ha": this.halign,
+			"va": this.valign,
+			"wr": this.wrapbyword,
+			"lho": this.line_height_offset,
+			"fn": this.facename,
+			"fs": this.fontstyle,
+			"ps": this.ptSize,
+			"pxh": this.pxHeight,
+			"tw": this.textWidth,
+			"th": this.textHeight,
+			"lrt": this.last_render_tick
+		};
+	};
+	instanceProto.loadFromJSON = function (o)
+	{
+		this.text = o["t"];
+		this.font = o["f"];
+		this.color = o["c"];
+		this.halign = o["ha"];
+		this.valign = o["va"];
+		this.wrapbyword = o["wr"];
+		this.line_height_offset = o["lho"];
+		this.facename = o["fn"];
+		this.fontstyle = o["fs"];
+		this.ptSize = o["ps"];
+		this.pxHeight = o["pxh"];
+		this.textWidth = o["tw"];
+		this.textHeight = o["th"];
+		this.last_render_tick = o["lrt"];
+		this.text_changed = true;
+		this.lastwidth = this.width;
+		this.lastwrapwidth = this.width;
+		this.lastheight = this.height;
+	};
+	instanceProto.tick = function ()
+	{
+		if (this.runtime.glwrap && this.mytex && (this.runtime.tickcount - this.last_render_tick >= 300))
+		{
+			var layer = this.layer;
+            this.update_bbox();
+            var bbox = this.bbox;
+            if (bbox.right < layer.viewLeft || bbox.bottom < layer.viewTop || bbox.left > layer.viewRight || bbox.top > layer.viewBottom)
+			{
+				this.runtime.glwrap.deleteTexture(this.mytex);
+				this.mytex = null;
+				this.myctx = null;
+				this.mycanvas = null;
+			}
+		}
+	};
+	instanceProto.onDestroy = function ()
+	{
+		this.myctx = null;
+		this.mycanvas = null;
+		if (this.runtime.glwrap && this.mytex)
+			this.runtime.glwrap.deleteTexture(this.mytex);
+		this.mytex = null;
+	};
+	instanceProto.updateFont = function ()
+	{
+		this.font = this.fontstyle + " " + this.ptSize.toString() + "pt " + this.facename;
+		this.text_changed = true;
+		this.runtime.redraw = true;
+	};
+	instanceProto.draw = function(ctx, glmode)
+	{
+		ctx.font = this.font;
+		ctx.textBaseline = "top";
+		ctx.fillStyle = this.color;
+		ctx.globalAlpha = glmode ? 1 : this.opacity;
+		var myscale = 1;
+		if (glmode)
+		{
+			myscale = this.layer.getScale();
+			ctx.save();
+			ctx.scale(myscale, myscale);
+		}
+		if (this.text_changed || this.width !== this.lastwrapwidth)
+		{
+			this.type.plugin.WordWrap(this.text, this.lines, ctx, this.width, this.wrapbyword);
+			this.text_changed = false;
+			this.lastwrapwidth = this.width;
+		}
+		this.update_bbox();
+		var penX = glmode ? 0 : this.bquad.tlx;
+		var penY = glmode ? 0 : this.bquad.tly;
+		if (this.runtime.pixel_rounding)
+		{
+			penX = (penX + 0.5) | 0;
+			penY = (penY + 0.5) | 0;
+		}
+		if (this.angle !== 0 && !glmode)
+		{
+			ctx.save();
+			ctx.translate(penX, penY);
+			ctx.rotate(this.angle);
+			penX = 0;
+			penY = 0;
+		}
+		var endY = penY + this.height;
+		var line_height = this.pxHeight;
+		line_height += this.line_height_offset;
+		var drawX;
+		var i;
+		if (this.valign === 1)		// center
+			penY += Math.max(this.height / 2 - (this.lines.length * line_height) / 2, 0);
+		else if (this.valign === 2)	// bottom
+			penY += Math.max(this.height - (this.lines.length * line_height) - 2, 0);
+		for (i = 0; i < this.lines.length; i++)
+		{
+			drawX = penX;
+			if (this.halign === 1)		// center
+				drawX = penX + (this.width - this.lines[i].width) / 2;
+			else if (this.halign === 2)	// right
+				drawX = penX + (this.width - this.lines[i].width);
+			ctx.fillText(this.lines[i].text, drawX, penY);
+			penY += line_height;
+			if (penY >= endY - line_height)
+				break;
+		}
+		if (this.angle !== 0 || glmode)
+			ctx.restore();
+		this.last_render_tick = this.runtime.tickcount;
+	};
+	instanceProto.drawGL = function(glw)
+	{
+		if (this.width < 1 || this.height < 1)
+			return;
+		var need_redraw = this.text_changed || this.need_text_redraw;
+		this.need_text_redraw = false;
+		var layer_scale = this.layer.getScale();
+		var layer_angle = this.layer.getAngle();
+		var rcTex = this.rcTex;
+		var floatscaledwidth = layer_scale * this.width;
+		var floatscaledheight = layer_scale * this.height;
+		var scaledwidth = Math.ceil(floatscaledwidth);
+		var scaledheight = Math.ceil(floatscaledheight);
+		var halfw = this.runtime.draw_width / 2;
+		var halfh = this.runtime.draw_height / 2;
+		if (!this.myctx)
+		{
+			this.mycanvas = document.createElement("canvas");
+			this.mycanvas.width = scaledwidth;
+			this.mycanvas.height = scaledheight;
+			this.lastwidth = scaledwidth;
+			this.lastheight = scaledheight;
+			need_redraw = true;
+			this.myctx = this.mycanvas.getContext("2d");
+		}
+		if (scaledwidth !== this.lastwidth || scaledheight !== this.lastheight)
+		{
+			this.mycanvas.width = scaledwidth;
+			this.mycanvas.height = scaledheight;
+			if (this.mytex)
+			{
+				glw.deleteTexture(this.mytex);
+				this.mytex = null;
+			}
+			need_redraw = true;
+		}
+		if (need_redraw)
+		{
+			this.myctx.clearRect(0, 0, scaledwidth, scaledheight);
+			this.draw(this.myctx, true);
+			if (!this.mytex)
+				this.mytex = glw.createEmptyTexture(scaledwidth, scaledheight, this.runtime.linearSampling, this.runtime.isMobile);
+			glw.videoToTexture(this.mycanvas, this.mytex, this.runtime.isMobile);
+		}
+		this.lastwidth = scaledwidth;
+		this.lastheight = scaledheight;
+		glw.setTexture(this.mytex);
+		glw.setOpacity(this.opacity);
+		glw.resetModelView();
+		glw.translate(-halfw, -halfh);
+		glw.updateModelView();
+		var q = this.bquad;
+		var tlx = this.layer.layerToCanvas(q.tlx, q.tly, true, true);
+		var tly = this.layer.layerToCanvas(q.tlx, q.tly, false, true);
+		var trx = this.layer.layerToCanvas(q.trx, q.try_, true, true);
+		var try_ = this.layer.layerToCanvas(q.trx, q.try_, false, true);
+		var brx = this.layer.layerToCanvas(q.brx, q.bry, true, true);
+		var bry = this.layer.layerToCanvas(q.brx, q.bry, false, true);
+		var blx = this.layer.layerToCanvas(q.blx, q.bly, true, true);
+		var bly = this.layer.layerToCanvas(q.blx, q.bly, false, true);
+		if (this.runtime.pixel_rounding || (this.angle === 0 && layer_angle === 0))
+		{
+			var ox = ((tlx + 0.5) | 0) - tlx;
+			var oy = ((tly + 0.5) | 0) - tly
+			tlx += ox;
+			tly += oy;
+			trx += ox;
+			try_ += oy;
+			brx += ox;
+			bry += oy;
+			blx += ox;
+			bly += oy;
+		}
+		if (this.angle === 0 && layer_angle === 0)
+		{
+			trx = tlx + scaledwidth;
+			try_ = tly;
+			brx = trx;
+			bry = tly + scaledheight;
+			blx = tlx;
+			bly = bry;
+			rcTex.right = 1;
+			rcTex.bottom = 1;
+		}
+		else
+		{
+			rcTex.right = floatscaledwidth / scaledwidth;
+			rcTex.bottom = floatscaledheight / scaledheight;
+		}
+		glw.quadTex(tlx, tly, trx, try_, brx, bry, blx, bly, rcTex);
+		glw.resetModelView();
+		glw.scale(layer_scale, layer_scale);
+		glw.rotateZ(-this.layer.getAngle());
+		glw.translate((this.layer.viewLeft + this.layer.viewRight) / -2, (this.layer.viewTop + this.layer.viewBottom) / -2);
+		glw.updateModelView();
+		this.last_render_tick = this.runtime.tickcount;
+	};
+	var wordsCache = [];
+	pluginProto.TokeniseWords = function (text)
+	{
+		wordsCache.length = 0;
+		var cur_word = "";
+		var ch;
+		var i = 0;
+		while (i < text.length)
+		{
+			ch = text.charAt(i);
+			if (ch === "\n")
+			{
+				if (cur_word.length)
+				{
+					wordsCache.push(cur_word);
+					cur_word = "";
+				}
+				wordsCache.push("\n");
+				++i;
+			}
+			else if (ch === " " || ch === "\t" || ch === "-")
+			{
+				do {
+					cur_word += text.charAt(i);
+					i++;
+				}
+				while (i < text.length && (text.charAt(i) === " " || text.charAt(i) === "\t"));
+				wordsCache.push(cur_word);
+				cur_word = "";
+			}
+			else if (i < text.length)
+			{
+				cur_word += ch;
+				i++;
+			}
+		}
+		if (cur_word.length)
+			wordsCache.push(cur_word);
+	};
+	var linesCache = [];
+	function allocLine()
+	{
+		if (linesCache.length)
+			return linesCache.pop();
+		else
+			return {};
+	};
+	function freeLine(l)
+	{
+		linesCache.push(l);
+	};
+	function freeAllLines(arr)
+	{
+		var i, len;
+		for (i = 0, len = arr.length; i < len; i++)
+		{
+			freeLine(arr[i]);
+		}
+		arr.length = 0;
+	};
+	pluginProto.WordWrap = function (text, lines, ctx, width, wrapbyword)
+	{
+		if (!text || !text.length)
+		{
+			freeAllLines(lines);
+			return;
+		}
+		if (width <= 2.0)
+		{
+			freeAllLines(lines);
+			return;
+		}
+		if (text.length <= 100 && text.indexOf("\n") === -1)
+		{
+			var all_width = ctx.measureText(text).width;
+			if (all_width <= width)
+			{
+				freeAllLines(lines);
+				lines.push(allocLine());
+				lines[0].text = text;
+				lines[0].width = all_width;
+				return;
+			}
+		}
+		this.WrapText(text, lines, ctx, width, wrapbyword);
+	};
+	pluginProto.WrapText = function (text, lines, ctx, width, wrapbyword)
+	{
+		var wordArray;
+		if (wrapbyword)
+		{
+			this.TokeniseWords(text);	// writes to wordsCache
+			wordArray = wordsCache;
+		}
+		else
+			wordArray = text;
+		var cur_line = "";
+		var prev_line;
+		var line_width;
+		var i;
+		var lineIndex = 0;
+		var line;
+		for (i = 0; i < wordArray.length; i++)
+		{
+			if (wordArray[i] === "\n")
+			{
+				if (lineIndex >= lines.length)
+					lines.push(allocLine());
+				line = lines[lineIndex];
+				line.text = cur_line;
+				line.width = ctx.measureText(cur_line).width;
+				lineIndex++;
+				cur_line = "";
+				continue;
+			}
+			prev_line = cur_line;
+			cur_line += wordArray[i];
+			line_width = ctx.measureText(cur_line).width;
+			if (line_width >= width)
+			{
+				if (lineIndex >= lines.length)
+					lines.push(allocLine());
+				line = lines[lineIndex];
+				line.text = prev_line;
+				line.width = ctx.measureText(prev_line).width;
+				lineIndex++;
+				cur_line = wordArray[i];
+				if (!wrapbyword && cur_line === " ")
+					cur_line = "";
+			}
+		}
+		if (cur_line.length)
+		{
+			if (lineIndex >= lines.length)
+				lines.push(allocLine());
+			line = lines[lineIndex];
+			line.text = cur_line;
+			line.width = ctx.measureText(cur_line).width;
+			lineIndex++;
+		}
+		for (i = lineIndex; i < lines.length; i++)
+			freeLine(lines[i]);
+		lines.length = lineIndex;
+	};
+	function Cnds() {};
+	Cnds.prototype.CompareText = function(text_to_compare, case_sensitive)
+	{
+		if (case_sensitive)
+			return this.text == text_to_compare;
+		else
+			return cr.equals_nocase(this.text, text_to_compare);
+	};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetText = function(param)
+	{
+		if (cr.is_number(param) && param < 1e9)
+			param = Math.round(param * 1e10) / 1e10;	// round to nearest ten billionth - hides floating point errors
+		var text_to_set = param.toString();
+		if (this.text !== text_to_set)
+		{
+			this.text = text_to_set;
+			this.text_changed = true;
+			this.runtime.redraw = true;
+		}
+	};
+	Acts.prototype.AppendText = function(param)
+	{
+		if (cr.is_number(param))
+			param = Math.round(param * 1e10) / 1e10;	// round to nearest ten billionth - hides floating point errors
+		var text_to_append = param.toString();
+		if (text_to_append)	// not empty
+		{
+			this.text += text_to_append;
+			this.text_changed = true;
+			this.runtime.redraw = true;
+		}
+	};
+	Acts.prototype.SetFontFace = function (face_, style_)
+	{
+		var newstyle = "";
+		switch (style_) {
+		case 1: newstyle = "bold"; break;
+		case 2: newstyle = "italic"; break;
+		case 3: newstyle = "bold italic"; break;
+		}
+		if (face_ === this.facename && newstyle === this.fontstyle)
+			return;		// no change
+		this.facename = face_;
+		this.fontstyle = newstyle;
+		this.updateFont();
+	};
+	Acts.prototype.SetFontSize = function (size_)
+	{
+		if (this.ptSize === size_)
+			return;
+		this.ptSize = size_;
+		this.pxHeight = Math.ceil((this.ptSize / 72.0) * 96.0) + 4;	// assume 96dpi...
+		this.updateFont();
+	};
+	Acts.prototype.SetFontColor = function (rgb)
+	{
+		var newcolor = "rgb(" + cr.GetRValue(rgb).toString() + "," + cr.GetGValue(rgb).toString() + "," + cr.GetBValue(rgb).toString() + ")";
+		if (newcolor === this.color)
+			return;
+		this.color = newcolor;
+		this.need_text_redraw = true;
+		this.runtime.redraw = true;
+	};
+	Acts.prototype.SetWebFont = function (familyname_, cssurl_)
+	{
+		if (this.runtime.isDomFree)
+		{
+			cr.logexport("[Construct 2] Text plugin: 'Set web font' not supported on this platform - the action has been ignored");
+			return;		// DC todo
+		}
+		var self = this;
+		var refreshFunc = (function () {
+							self.runtime.redraw = true;
+							self.text_changed = true;
+						});
+		if (requestedWebFonts.hasOwnProperty(cssurl_))
+		{
+			var newfacename = "'" + familyname_ + "'";
+			if (this.facename === newfacename)
+				return;	// no change
+			this.facename = newfacename;
+			this.updateFont();
+			for (var i = 1; i < 10; i++)
+			{
+				setTimeout(refreshFunc, i * 100);
+				setTimeout(refreshFunc, i * 1000);
+			}
+			return;
+		}
+		var wf = document.createElement("link");
+		wf.href = cssurl_;
+		wf.rel = "stylesheet";
+		wf.type = "text/css";
+		wf.onload = refreshFunc;
+		document.getElementsByTagName('head')[0].appendChild(wf);
+		requestedWebFonts[cssurl_] = true;
+		this.facename = "'" + familyname_ + "'";
+		this.updateFont();
+		for (var i = 1; i < 10; i++)
+		{
+			setTimeout(refreshFunc, i * 100);
+			setTimeout(refreshFunc, i * 1000);
+		}
+;
+	};
+	Acts.prototype.SetEffect = function (effect)
+	{
+		this.compositeOp = cr.effectToCompositeOp(effect);
+		cr.setGLBlend(this, effect, this.runtime.gl);
+		this.runtime.redraw = true;
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.Text = function(ret)
+	{
+		ret.set_string(this.text);
+	};
+	Exps.prototype.FaceName = function (ret)
+	{
+		ret.set_string(this.facename);
+	};
+	Exps.prototype.FaceSize = function (ret)
+	{
+		ret.set_int(this.ptSize);
+	};
+	Exps.prototype.TextWidth = function (ret)
+	{
+		var w = 0;
+		var i, len, x;
+		for (i = 0, len = this.lines.length; i < len; i++)
+		{
+			x = this.lines[i].width;
+			if (w < x)
+				w = x;
+		}
+		ret.set_int(w);
+	};
+	Exps.prototype.TextHeight = function (ret)
+	{
+		ret.set_int(this.lines.length * (this.pxHeight + this.line_height_offset) - this.line_height_offset);
+	};
+	pluginProto.exps = new Exps();
+}());
+;
+;
 cr.plugins_.TiledBg = function(runtime)
 {
 	this.runtime = runtime;
@@ -18450,6 +19716,166 @@ cr.plugins_.Touch = function(runtime)
 }());
 ;
 ;
+cr.behaviors.Anchor = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Anchor.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.anch_left = this.properties[0];		// 0 = left, 1 = right, 2 = none
+		this.anch_top = this.properties[1];			// 0 = top, 1 = bottom, 2 = none
+		this.anch_right = this.properties[2];		// 0 = none, 1 = right
+		this.anch_bottom = this.properties[3];		// 0 = none, 1 = bottom
+		this.inst.update_bbox();
+		this.xleft = this.inst.bbox.left;
+		this.ytop = this.inst.bbox.top;
+		this.xright = this.runtime.original_width - this.inst.bbox.left;
+		this.ybottom = this.runtime.original_height - this.inst.bbox.top;
+		this.rdiff = this.runtime.original_width - this.inst.bbox.right;
+		this.bdiff = this.runtime.original_height - this.inst.bbox.bottom;
+		this.enabled = (this.properties[4] !== 0);
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"xleft": this.xleft,
+			"ytop": this.ytop,
+			"xright": this.xright,
+			"ybottom": this.ybottom,
+			"rdiff": this.rdiff,
+			"bdiff": this.bdiff,
+			"enabled": this.enabled
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.xleft = o["xleft"];
+		this.ytop = o["ytop"];
+		this.xright = o["xright"];
+		this.ybottom = o["ybottom"];
+		this.rdiff = o["rdiff"];
+		this.bdiff = o["bdiff"];
+		this.enabled = o["enabled"];
+	};
+	behinstProto.tick = function ()
+	{
+		if (!this.enabled)
+			return;
+		var n;
+		var layer = this.inst.layer;
+		var inst = this.inst;
+		var bbox = this.inst.bbox;
+		if (this.anch_left === 0)
+		{
+			inst.update_bbox();
+			n = (layer.viewLeft + this.xleft) - bbox.left;
+			if (n !== 0)
+			{
+				inst.x += n;
+				inst.set_bbox_changed();
+			}
+		}
+		else if (this.anch_left === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewRight - this.xright) - bbox.left;
+			if (n !== 0)
+			{
+				inst.x += n;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_top === 0)
+		{
+			inst.update_bbox();
+			n = (layer.viewTop + this.ytop) - bbox.top;
+			if (n !== 0)
+			{
+				inst.y += n;
+				inst.set_bbox_changed();
+			}
+		}
+		else if (this.anch_top === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewBottom - this.ybottom) - bbox.top;
+			if (n !== 0)
+			{
+				inst.y += n;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_right === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewRight - this.rdiff) - bbox.right;
+			if (n !== 0)
+			{
+				inst.width += n;
+				if (inst.width < 0)
+					inst.width = 0;
+				inst.set_bbox_changed();
+			}
+		}
+		if (this.anch_bottom === 1)
+		{
+			inst.update_bbox();
+			n = (layer.viewBottom - this.bdiff) - bbox.bottom;
+			if (n !== 0)
+			{
+				inst.height += n;
+				if (inst.height < 0)
+					inst.height = 0;
+				inst.set_bbox_changed();
+			}
+		}
+	};
+	function Cnds() {};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetEnabled = function (e)
+	{
+		if (this.enabled && e === 0)
+			this.enabled = false;
+		else if (!this.enabled && e !== 0)
+		{
+			this.inst.update_bbox();
+			this.xleft = this.inst.bbox.left;
+			this.ytop = this.inst.bbox.top;
+			this.xright = this.runtime.original_width - this.inst.bbox.left;
+			this.ybottom = this.runtime.original_height - this.inst.bbox.top;
+			this.rdiff = this.runtime.original_width - this.inst.bbox.right;
+			this.bdiff = this.runtime.original_height - this.inst.bbox.bottom;
+			this.enabled = true;
+		}
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
 cr.behaviors.Bullet = function(runtime)
 {
 	this.runtime = runtime;
@@ -18678,13 +20104,13 @@ cr.behaviors.Bullet = function(runtime)
 }());
 ;
 ;
-cr.behaviors.EightDir = function(runtime)
+cr.behaviors.Flash = function(runtime)
 {
 	this.runtime = runtime;
 };
 (function ()
 {
-	var behaviorProto = cr.behaviors.EightDir.prototype;
+	var behaviorProto = cr.behaviors.Flash.prototype;
 	behaviorProto.Type = function(behavior, objtype)
 	{
 		this.behavior = behavior;
@@ -18701,413 +20127,278 @@ cr.behaviors.EightDir = function(runtime)
 		this.behavior = type.behavior;
 		this.inst = inst;				// associated object instance to modify
 		this.runtime = type.runtime;
-		this.upkey = false;
-		this.downkey = false;
-		this.leftkey = false;
-		this.rightkey = false;
-		this.ignoreInput = false;
-		this.simup = false;
-		this.simdown = false;
-		this.simleft = false;
-		this.simright = false;
-		this.lastuptick = -1;
-		this.lastdowntick = -1;
-		this.lastlefttick = -1;
-		this.lastrighttick = -1;
-		this.dx = 0;
-		this.dy = 0;
 	};
 	var behinstProto = behaviorProto.Instance.prototype;
 	behinstProto.onCreate = function()
 	{
-		this.maxspeed = this.properties[0];
-		this.acc = this.properties[1];
-		this.dec = this.properties[2];
-		this.directions = this.properties[3];	// 0=Up & down, 1=Left & right, 2=4 directions, 3=8 directions"
-		this.angleMode = this.properties[4];	// 0=No,1=90-degree intervals, 2=45-degree intervals, 3=360 degree (smooth)
-		this.defaultControls = (this.properties[5] === 1);	// 0=no, 1=yes
-		this.enabled = (this.properties[6] !== 0);
-		if (this.defaultControls && !this.runtime.isDomFree)
-		{
-			jQuery(document).keydown(
-				(function (self) {
-					return function(info) {
-						self.onKeyDown(info);
-					};
-				})(this)
-			);
-			jQuery(document).keyup(
-				(function (self) {
-					return function(info) {
-						self.onKeyUp(info);
-					};
-				})(this)
-			);
-		}
+		this.ontime = 0;
+		this.offtime = 0;
+		this.stage = 0;			// 0 = on, 1 = off
+		this.stagetimeleft = 0;
+		this.timeleft = 0;
 	};
 	behinstProto.saveToJSON = function ()
 	{
 		return {
-			"dx": this.dx,
-			"dy": this.dy,
-			"enabled": this.enabled,
-			"maxspeed": this.maxspeed,
-			"acc": this.acc,
-			"dec": this.dec,
-			"ignoreInput": this.ignoreInput
+			"ontime": this.ontime,
+			"offtime": this.offtime,
+			"stage": this.stage,
+			"stagetimeleft": this.stagetimeleft,
+			"timeleft": this.timeleft
 		};
 	};
 	behinstProto.loadFromJSON = function (o)
 	{
-		this.dx = o["dx"];
-		this.dy = o["dy"];
-		this.enabled = o["enabled"];
-		this.maxspeed = o["maxspeed"];
+		this.ontime = o["ontime"];
+		this.offtime = o["offtime"];
+		this.stage = o["stage"];
+		this.stagetimeleft = o["stagetimeleft"];
+		this.timeleft = o["timeleft"];
+	};
+	behinstProto.tick = function ()
+	{
+		if (this.timeleft <= 0)
+			return;		// not flashing
+		var dt = this.runtime.getDt(this.inst);
+		this.timeleft -= dt;
+		if (this.timeleft <= 0)
+		{
+			this.timeleft = 0;
+			this.inst.visible = true;
+			this.runtime.redraw = true;
+			this.runtime.trigger(cr.behaviors.Flash.prototype.cnds.OnFlashEnded, this.inst);
+			return;
+		}
+		this.stagetimeleft -= dt;
+		if (this.stagetimeleft <= 0)
+		{
+			if (this.stage === 0)
+			{
+				this.inst.visible = false;
+				this.stage = 1;
+				this.stagetimeleft += this.offtime;
+			}
+			else
+			{
+				this.inst.visible = true;
+				this.stage = 0;
+				this.stagetimeleft += this.ontime;
+			}
+			this.runtime.redraw = true;
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.IsFlashing = function ()
+	{
+		return this.timeleft > 0;
+	};
+	Cnds.prototype.OnFlashEnded = function ()
+	{
+		return true;
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.Flash = function (on_, off_, dur_)
+	{
+		this.ontime = on_;
+		this.offtime = off_;
+		this.stage = 1;		// always start off
+		this.stagetimeleft = off_;
+		this.timeleft = dur_;
+		this.inst.visible = false;
+		this.runtime.redraw = true;
+	};
+	Acts.prototype.StopFlashing = function ()
+	{
+		this.timeleft = 0;
+		this.inst.visible = true;
+		this.runtime.redraw = true;
+		return;
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.Rotate = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Rotate.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.speed = cr.to_radians(this.properties[0]);
+		this.acc = cr.to_radians(this.properties[1]);
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"speed": this.speed,
+			"acc": this.acc
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.speed = o["speed"];
 		this.acc = o["acc"];
-		this.dec = o["dec"];
-		this.ignoreInput = o["ignoreInput"];
-		this.upkey = false;
-		this.downkey = false;
-		this.leftkey = false;
-		this.rightkey = false;
-		this.simup = false;
-		this.simdown = false;
-		this.simleft = false;
-		this.simright = false;
-		this.lastuptick = -1;
-		this.lastdowntick = -1;
-		this.lastlefttick = -1;
-		this.lastrighttick = -1;
-	};
-	behinstProto.onKeyDown = function (info)
-	{
-		var tickcount = this.runtime.tickcount;
-		switch (info.which) {
-		case 37:	// left
-			info.preventDefault();
-			if (this.lastlefttick < tickcount)
-				this.leftkey = true;
-			break;
-		case 38:	// up
-			info.preventDefault();
-			if (this.lastuptick < tickcount)
-				this.upkey = true;
-			break;
-		case 39:	// right
-			info.preventDefault();
-			if (this.lastrighttick < tickcount)
-				this.rightkey = true;
-			break;
-		case 40:	// down
-			info.preventDefault();
-			if (this.lastdowntick < tickcount)
-				this.downkey = true;
-			break;
-		}
-	};
-	behinstProto.onKeyUp = function (info)
-	{
-		var tickcount = this.runtime.tickcount;
-		switch (info.which) {
-		case 37:	// left
-			info.preventDefault();
-			this.leftkey = false;
-			this.lastlefttick = tickcount;
-			break;
-		case 38:	// up
-			info.preventDefault();
-			this.upkey = false;
-			this.lastuptick = tickcount;
-			break;
-		case 39:	// right
-			info.preventDefault();
-			this.rightkey = false;
-			this.lastrighttick = tickcount;
-			break;
-		case 40:	// down
-			info.preventDefault();
-			this.downkey = false;
-			this.lastdowntick = tickcount;
-			break;
-		}
 	};
 	behinstProto.tick = function ()
 	{
 		var dt = this.runtime.getDt(this.inst);
-		var left = this.leftkey || this.simleft;
-		var right = this.rightkey || this.simright;
-		var up = this.upkey || this.simup;
-		var down = this.downkey || this.simdown;
-		this.simleft = false;
-		this.simright = false;
-		this.simup = false;
-		this.simdown = false;
-		if (!this.enabled)
+		if (dt === 0)
 			return;
-		var collobj = this.runtime.testOverlapSolid(this.inst);
-		if (collobj)
+		if (this.acc !== 0)
+			this.speed += this.acc * dt;
+		if (this.speed !== 0)
 		{
-			this.runtime.registerCollision(this.inst, collobj);
-			if (!this.runtime.pushOutSolidNearest(this.inst))
-				return;		// must be stuck in solid
-		}
-		if (this.ignoreInput)
-		{
-			left = false;
-			right = false;
-			up = false;
-			down = false;
-		}
-		if (this.directions === 0)
-		{
-			left = false;
-			right = false;
-		}
-		else if (this.directions === 1)
-		{
-			up = false;
-			down = false;
-		}
-		if (this.directions === 2 && (up || down))
-		{
-			left = false;
-			right = false;
-		}
-		if (left == right)	// both up or both down
-		{
-			if (this.dx < 0)
-			{
-				this.dx += this.dec * dt;
-				if (this.dx > 0)
-					this.dx = 0;
-			}
-			else if (this.dx > 0)
-			{
-				this.dx -= this.dec * dt;
-				if (this.dx < 0)
-					this.dx = 0;
-			}
-		}
-		if (up == down)
-		{
-			if (this.dy < 0)
-			{
-				this.dy += this.dec * dt;
-				if (this.dy > 0)
-					this.dy = 0;
-			}
-			else if (this.dy > 0)
-			{
-				this.dy -= this.dec * dt;
-				if (this.dy < 0)
-					this.dy = 0;
-			}
-		}
-		if (left && !right)
-		{
-			if (this.dx > 0)
-				this.dx -= (this.acc + this.dec) * dt;
-			else
-				this.dx -= this.acc * dt;
-		}
-		if (right && !left)
-		{
-			if (this.dx < 0)
-				this.dx += (this.acc + this.dec) * dt;
-			else
-				this.dx += this.acc * dt;
-		}
-		if (up && !down)
-		{
-			if (this.dy > 0)
-				this.dy -= (this.acc + this.dec) * dt;
-			else
-				this.dy -= this.acc * dt;
-		}
-		if (down && !up)
-		{
-			if (this.dy < 0)
-				this.dy += (this.acc + this.dec) * dt;
-			else
-				this.dy += this.acc * dt;
-		}
-		var ax, ay;
-		if (this.dx !== 0 || this.dy !== 0)
-		{
-			var speed = Math.sqrt(this.dx * this.dx + this.dy * this.dy);
-			if (speed > this.maxspeed)
-			{
-				var a = Math.atan2(this.dy, this.dx);
-				this.dx = this.maxspeed * Math.cos(a);
-				this.dy = this.maxspeed * Math.sin(a);
-			}
-			var oldx = this.inst.x;
-			var oldy = this.inst.y;
-			var oldangle = this.inst.angle;
-			this.inst.x += this.dx * dt;
+			this.inst.angle = cr.clamp_angle(this.inst.angle + this.speed * dt);
 			this.inst.set_bbox_changed();
-			collobj = this.runtime.testOverlapSolid(this.inst);
-			if (collobj)
-			{
-				this.inst.x = oldx;
-				this.dx = 0;
-				this.inst.set_bbox_changed();
-				this.runtime.registerCollision(this.inst, collobj);
-			}
-			this.inst.y += this.dy * dt;
-			this.inst.set_bbox_changed();
-			collobj = this.runtime.testOverlapSolid(this.inst);
-			if (collobj)
-			{
-				this.inst.y = oldy;
-				this.dy = 0;
-				this.inst.set_bbox_changed();
-				this.runtime.registerCollision(this.inst, collobj);
-			}
-			ax = cr.round6dp(this.dx);
-			ay = cr.round6dp(this.dy);
-			if (ax !== 0 || ay !== 0)
-			{
-				if (this.angleMode === 1)	// 90 degree intervals
-					this.inst.angle = cr.to_clamped_radians(Math.round(cr.to_degrees(Math.atan2(ay, ax)) / 90.0) * 90.0);
-				else if (this.angleMode === 2)	// 45 degree intervals
-					this.inst.angle = cr.to_clamped_radians(Math.round(cr.to_degrees(Math.atan2(ay, ax)) / 45.0) * 45.0);
-				else if (this.angleMode === 3)	// 360 degree
-					this.inst.angle = Math.atan2(ay, ax);
-			}
-			this.inst.set_bbox_changed();
-			if (this.inst.angle != oldangle)
-			{
-				collobj = this.runtime.testOverlapSolid(this.inst);
-				if (collobj)
-				{
-					this.inst.angle = oldangle;
-					this.inst.set_bbox_changed();
-					this.runtime.registerCollision(this.inst, collobj);
-				}
-			}
 		}
 	};
 	function Cnds() {};
-	Cnds.prototype.IsMoving = function ()
-	{
-		return this.dx !== 0 || this.dy !== 0;
-	};
-	Cnds.prototype.CompareSpeed = function (cmp, s)
-	{
-		var speed = Math.sqrt(this.dx * this.dx + this.dy * this.dy);
-		return cr.do_cmp(speed, cmp, s);
-	};
 	behaviorProto.cnds = new Cnds();
 	function Acts() {};
-	Acts.prototype.Stop = function ()
+	Acts.prototype.SetSpeed = function (s)
 	{
-		this.dx = 0;
-		this.dy = 0;
+		this.speed = cr.to_radians(s);
 	};
-	Acts.prototype.Reverse = function ()
+	Acts.prototype.SetAcceleration = function (a)
 	{
-		this.dx *= -1;
-		this.dy *= -1;
-	};
-	Acts.prototype.SetIgnoreInput = function (ignoring)
-	{
-		this.ignoreInput = ignoring;
-	};
-	Acts.prototype.SetSpeed = function (speed)
-	{
-		if (speed < 0)
-			speed = 0;
-		if (speed > this.maxspeed)
-			speed = this.maxspeed;
-		var a = Math.atan2(this.dy, this.dx);
-		this.dx = speed * Math.cos(a);
-		this.dy = speed * Math.sin(a);
-	};
-	Acts.prototype.SetMaxSpeed = function (maxspeed)
-	{
-		this.maxspeed = maxspeed;
-		if (this.maxspeed < 0)
-			this.maxspeed = 0;
-	};
-	Acts.prototype.SetAcceleration = function (acc)
-	{
-		this.acc = acc;
-		if (this.acc < 0)
-			this.acc = 0;
-	};
-	Acts.prototype.SetDeceleration = function (dec)
-	{
-		this.dec = dec;
-		if (this.dec < 0)
-			this.dec = 0;
-	};
-	Acts.prototype.SimulateControl = function (ctrl)
-	{
-		switch (ctrl) {
-		case 0:		this.simleft = true;	break;
-		case 1:		this.simright = true;	break;
-		case 2:		this.simup = true;		break;
-		case 3:		this.simdown = true;	break;
-		}
-	};
-	Acts.prototype.SetEnabled = function (en)
-	{
-		this.enabled = (en === 1);
-	};
-	Acts.prototype.SetVectorX = function (x_)
-	{
-		this.dx = x_;
-	};
-	Acts.prototype.SetVectorY = function (y_)
-	{
-		this.dy = y_;
+		this.acc = cr.to_radians(a);
 	};
 	behaviorProto.acts = new Acts();
 	function Exps() {};
 	Exps.prototype.Speed = function (ret)
 	{
-		ret.set_float(Math.sqrt(this.dx * this.dx + this.dy * this.dy));
-	};
-	Exps.prototype.MaxSpeed = function (ret)
-	{
-		ret.set_float(this.maxspeed);
+		ret.set_float(cr.to_degrees(this.speed));
 	};
 	Exps.prototype.Acceleration = function (ret)
 	{
-		ret.set_float(this.acc);
-	};
-	Exps.prototype.Deceleration = function (ret)
-	{
-		ret.set_float(this.dec);
-	};
-	Exps.prototype.MovingAngle = function (ret)
-	{
-		ret.set_float(cr.to_degrees(Math.atan2(this.dy, this.dx)));
-	};
-	Exps.prototype.VectorX = function (ret)
-	{
-		ret.set_float(this.dx);
-	};
-	Exps.prototype.VectorY = function (ret)
-	{
-		ret.set_float(this.dy);
+		ret.set_float(cr.to_degrees(this.acc));
 	};
 	behaviorProto.exps = new Exps();
 }());
 ;
 ;
-cr.behaviors.scrollto = function(runtime)
+cr.behaviors.bound = function(runtime)
 {
 	this.runtime = runtime;
-	this.shakeMag = 0;
-	this.shakeStart = 0;
-	this.shakeEnd = 0;
-	this.shakeMode = 0;
 };
 (function ()
 {
-	var behaviorProto = cr.behaviors.scrollto.prototype;
+	var behaviorProto = cr.behaviors.bound.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+		this.mode = 0;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.mode = this.properties[0];	// 0 = origin, 1 = edge
+	};
+	behinstProto.tick = function ()
+	{
+	};
+	behinstProto.tick2 = function ()
+	{
+		this.inst.update_bbox();
+		var bbox = this.inst.bbox;
+		var layout = this.inst.layer.layout;
+		var changed = false;
+		if (this.mode === 0)	// origin
+		{
+			if (this.inst.x < 0)
+			{
+				this.inst.x = 0;
+				changed = true;
+			}
+			if (this.inst.y < 0)
+			{
+				this.inst.y = 0;
+				changed = true;
+			}
+			if (this.inst.x > layout.width)
+			{
+				this.inst.x = layout.width;
+				changed = true;
+			}
+			if (this.inst.y > layout.height)
+			{
+				this.inst.y = layout.height;
+				changed = true;
+			}
+		}
+		else
+		{
+			if (bbox.left < 0)
+			{
+				this.inst.x -= bbox.left;
+				changed = true;
+			}
+			if (bbox.top < 0)
+			{
+				this.inst.y -= bbox.top;
+				changed = true;
+			}
+			if (bbox.right > layout.width)
+			{
+				this.inst.x -= (bbox.right - layout.width);
+				changed = true;
+			}
+			if (bbox.bottom > layout.height)
+			{
+				this.inst.y -= (bbox.bottom - layout.height);
+				changed = true;
+			}
+		}
+		if (changed)
+			this.inst.set_bbox_changed();
+	};
+}());
+;
+;
+cr.behaviors.destroy = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.destroy.prototype;
 	behaviorProto.Type = function(behavior, objtype)
 	{
 		this.behavior = behavior;
@@ -19128,83 +20419,15 @@ cr.behaviors.scrollto = function(runtime)
 	var behinstProto = behaviorProto.Instance.prototype;
 	behinstProto.onCreate = function()
 	{
-		this.enabled = (this.properties[0] !== 0);
-	};
-	behinstProto.saveToJSON = function ()
-	{
-		return {
-			"smg": this.behavior.shakeMag,
-			"ss": this.behavior.shakeStart,
-			"se": this.behavior.shakeEnd,
-			"smd": this.behavior.shakeMode
-		};
-	};
-	behinstProto.loadFromJSON = function (o)
-	{
-		this.behavior.shakeMag = o["smg"];
-		this.behavior.shakeStart = o["ss"];
-		this.behavior.shakeEnd = o["se"];
-		this.behavior.shakeMode = o["smd"];
 	};
 	behinstProto.tick = function ()
 	{
-	};
-	function getScrollToBehavior(inst)
-	{
-		var i, len, binst;
-		for (i = 0, len = inst.behavior_insts.length; i < len; ++i)
-		{
-			binst = inst.behavior_insts[i];
-			if (binst.behavior instanceof cr.behaviors.scrollto)
-				return binst;
-		}
-		return null;
-	};
-	behinstProto.tick2 = function ()
-	{
-		if (!this.enabled)
-			return;
-		var all = this.behavior.my_instances.valuesRef();
-		var sumx = 0, sumy = 0;
-		var i, len, binst, count = 0;
-		for (i = 0, len = all.length; i < len; i++)
-		{
-			binst = getScrollToBehavior(all[i]);
-			if (!binst || !binst.enabled)
-				continue;
-			sumx += all[i].x;
-			sumy += all[i].y;
-			++count;
-		}
+		this.inst.update_bbox();
+		var bbox = this.inst.bbox;
 		var layout = this.inst.layer.layout;
-		var now = this.runtime.kahanTime.sum;
-		var offx = 0, offy = 0;
-		if (now >= this.behavior.shakeStart && now < this.behavior.shakeEnd)
-		{
-			var mag = this.behavior.shakeMag * Math.min(this.runtime.timescale, 1);
-			if (this.behavior.shakeMode === 0)
-				mag *= 1 - (now - this.behavior.shakeStart) / (this.behavior.shakeEnd - this.behavior.shakeStart);
-			var a = Math.random() * Math.PI * 2;
-			var d = Math.random() * mag;
-			offx = Math.cos(a) * d;
-			offy = Math.sin(a) * d;
-		}
-		layout.scrollToX(sumx / count + offx);
-		layout.scrollToY(sumy / count + offy);
+		if (bbox.right < 0 || bbox.bottom < 0 || bbox.left > layout.width || bbox.top > layout.height)
+			this.runtime.DestroyInstance(this.inst);
 	};
-	function Acts() {};
-	Acts.prototype.Shake = function (mag, dur, mode)
-	{
-		this.behavior.shakeMag = mag;
-		this.behavior.shakeStart = this.runtime.kahanTime.sum;
-		this.behavior.shakeEnd = this.behavior.shakeStart + dur;
-		this.behavior.shakeMode = mode;
-	};
-	Acts.prototype.SetEnabled = function (e)
-	{
-		this.enabled = (e !== 0);
-	};
-	behaviorProto.acts = new Acts();
 }());
 cr.getProjectModel = function() { return [
 	null,
@@ -19224,6 +20447,18 @@ cr.getProjectModel = function() { return [
 	]
 ,	[
 		cr.plugins_.Sprite,
+		false,
+		true,
+		true,
+		true,
+		true,
+		true,
+		true,
+		true,
+		false
+	]
+,	[
+		cr.plugins_.Text,
 		false,
 		true,
 		true,
@@ -19270,11 +20505,23 @@ cr.getProjectModel = function() { return [
 		false,
 		false
 	]
+,	[
+		cr.plugins_.Browser,
+		true,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false
+	]
 	],
 	[
 	[
 		"t0",
-		cr.plugins_.Keyboard,
+		cr.plugins_.Text,
 		false,
 		[],
 		0,
@@ -19285,14 +20532,13 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		697643239727932,
+		0,
 		[],
 		null
-		,[]
 	]
 ,	[
 		"t1",
-		cr.plugins_.Audio,
+		cr.plugins_.Text,
 		false,
 		[],
 		0,
@@ -19303,48 +20549,24 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		5743743964909097,
+		1,
 		[],
 		null
-		,[0,0,1,1,600,600,10000,1,5000,1]
 	]
 ,	[
 		"t2",
-		cr.plugins_.Sprite,
+		cr.plugins_.Text,
 		false,
 		[],
-		2,
+		0,
 		0,
 		null,
+		null,
 		[
-			[
-			"Default",
-			5,
-			false,
-			1,
-			0,
-			false,
-			3433537206224888,
-			[
-				["images/avioncito2-sheet0.png", 31805, 0, 0, 666, 465, 1, 0.5, 0.5010752677917481,[],[-0.5,-0.5010752677917481,0,-0.2752692699432373,0.3588590025901794,-0.2989242672920227,0.5,0.498924732208252,0,0.2666667103767395,-0.2717719972133637,0.172042727470398,-0.4159159064292908,-0.002150267362594605],0]
-			]
-			]
-		],
-		[
-		[
-			"8Direction",
-			cr.behaviors.EightDir,
-			3159537428588173
-		]
-,		[
-			"ScrollTo",
-			cr.behaviors.scrollto,
-			4780386454550221
-		]
 		],
 		false,
 		false,
-		4690476536184228,
+		2,
 		[],
 		null
 	]
@@ -19364,9 +20586,9 @@ cr.getProjectModel = function() { return [
 			1,
 			0,
 			false,
-			9995287342913162,
+			4,
 			[
-				["images/balacorazon-sheet0.png", 16269, 0, 0, 286, 262, 1, 0.5, 0.5,[],[-0.4860140085220337,-0.4847328066825867,0,-0.3435109853744507,0.4090909957885742,-0.4007633924484253,0.4475520253181458,0,0,0.4961829781532288,-0.2482520043849945,0.2251909971237183,-0.4335663914680481,0],0]
+				["images/logo-sheet0.png", 73954, 0, 0, 449, 231, 1, 0.5011135935783386, 0.5021644830703735,[],[],0]
 			]
 			]
 		],
@@ -19374,7 +20596,7 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		243727148298369,
+		3,
 		[],
 		null
 	]
@@ -19383,7 +20605,7 @@ cr.getProjectModel = function() { return [
 		cr.plugins_.Sprite,
 		false,
 		[],
-		1,
+		0,
 		0,
 		null,
 		[
@@ -19394,22 +20616,17 @@ cr.getProjectModel = function() { return [
 			1,
 			0,
 			false,
-			4584428351650855,
+			6,
 			[
-				["images/balacorazon-sheet0.png", 16269, 0, 0, 286, 262, 1, 0.5, 0.5,[],[-0.4860140085220337,-0.4847328066825867,0,-0.3435109853744507,0.4090909957885742,-0.4007633924484253,0.4475520253181458,0,0,0.4961829781532288,-0.2482520043849945,0.2251909971237183,-0.4335663914680481,0],0]
+				["images/background-default-000.jpg", 32398, 0, 0, 0, 0, 1, 0.5, 0.5,[],[],0]
 			]
 			]
 		],
 		[
-		[
-			"Bullet",
-			cr.behaviors.Bullet,
-			2963323641189841
-		]
 		],
 		false,
 		false,
-		3504267853738266,
+		5,
 		[],
 		null
 	]
@@ -19429,9 +20646,9 @@ cr.getProjectModel = function() { return [
 			1,
 			0,
 			false,
-			9952157745974546,
+			8,
 			[
-				["images/sprite-sheet0.png", 826, 0, 0, 250, 250, 1, 0.5, 0.5,[],[],0]
+				["images/background2-default-000.jpg", 33556, 0, 0, 0, 0, 1, 0.5, 0.5,[],[],0]
 			]
 			]
 		],
@@ -19439,7 +20656,7 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		2297162612959848,
+		7,
 		[],
 		null
 	]
@@ -19459,9 +20676,9 @@ cr.getProjectModel = function() { return [
 			1,
 			0,
 			false,
-			4045041313445845,
+			10,
 			[
-				["images/nnube-sheet0.png", 11888, 0, 0, 1065, 476, 1, 0.5004695057868958, 0.5,[],[],0]
+				["images/background3-default-000.jpg", 59785, 0, 0, 0, 0, 1, 0.5, 0.5,[],[],0]
 			]
 			]
 		],
@@ -19469,7 +20686,7 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		6480210110894096,
+		9,
 		[],
 		null
 	]
@@ -19489,9 +20706,9 @@ cr.getProjectModel = function() { return [
 			1,
 			0,
 			false,
-			1386796173254713,
+			12,
 			[
-				["images/nnube2-sheet0.png", 3931, 0, 0, 204, 91, 1, 0.5, 0.5054945349693298,[],[],0]
+				["images/background4-default-000.jpg", 40610, 0, 0, 0, 0, 1, 0.5, 0.5,[],[],0]
 			]
 			]
 		],
@@ -19499,24 +20716,76 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		8676134789705164,
+		11,
 		[],
 		null
 	]
 ,	[
 		"t8",
-		cr.plugins_.TiledBg,
+		cr.plugins_.Sprite,
 		false,
 		[],
 		0,
 		0,
-		["images/tiledbackground.png", 5561, 0],
 		null,
+		[
+			[
+			"Default",
+			15,
+			false,
+			1,
+			0,
+			false,
+			14,
+			[
+				["images/explosion1-sheet0.png", 197529, 1, 1, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 131, 1, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 261, 1, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 391, 1, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 521, 1, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 651, 1, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 1, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 1, 131, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 131, 131, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 261, 131, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 391, 131, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 521, 131, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 651, 131, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 131, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 1, 261, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 131, 261, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 261, 261, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 391, 261, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 521, 261, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 651, 261, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 261, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 1, 391, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 131, 391, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 261, 391, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 391, 391, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 521, 391, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 651, 391, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 391, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 1, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 131, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 261, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 391, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 521, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 651, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 521, 128, 128, 1, 0.5, 0.5,[],[],0],
+				["images/explosion1-sheet0.png", 197529, 781, 521, 128, 128, 1, 0.5, 0.5,[],[],0]
+			]
+			]
+		],
 		[
 		],
 		false,
 		false,
-		447356357853767,
+		13,
 		[],
 		null
 	]
@@ -19524,8 +20793,109 @@ cr.getProjectModel = function() { return [
 		"t9",
 		cr.plugins_.Sprite,
 		false,
-		[],
+		[16],
+		1,
 		0,
+		null,
+		[
+			[
+			"Default",
+			12,
+			true,
+			1,
+			0,
+			false,
+			18,
+			[
+				["images/player-sheet0.png", 182529, 238, 1, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 316, 1, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 394, 1, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 1, 105, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 79, 105, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 157, 105, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 1, 1, 77, 102, 1, 0.5064935088157654, 0.5,[["Imagepoint 1", 0.4805194735527039, -0.05882352963089943]],[-0.2548485100269318,-0.1973040103912354,-0.008138507604598999,-0.4865196049213409,0.228703498840332,-0.1875,0.2319934964179993,0.02083301544189453,0.4622564911842346,0.03798997402191162,0.4688354730606079,0.3002449870109558,-0.006493508815765381,0.4901959896087647,-0.4818224012851715,0.2904409766197205,-0.4916909039020538,0.03553897142410278,-0.2548485100269318,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 80, 1, 77, 102, 1, 0.5064935088157654, 0.5,[["Imagepoint 1", 0.4805194735527039, -0.05882352963089943]],[-0.2548485100269318,-0.1973040103912354,-0.008138507604598999,-0.4865196049213409,0.228703498840332,-0.1875,0.2319934964179993,0.02083301544189453,0.4622564911842346,0.03798997402191162,0.4688354730606079,0.3002449870109558,-0.006493508815765381,0.4901959896087647,-0.4818224012851715,0.2904409766197205,-0.4916909039020538,0.03553897142410278,-0.2548485100269318,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 159, 1, 77, 102, 1, 0.5064935088157654, 0.5,[["Imagepoint 1", 0.4805194735527039, -0.05882352963089943]],[-0.2548485100269318,-0.1973040103912354,-0.008138507604598999,-0.4865196049213409,0.228703498840332,-0.1875,0.2319934964179993,0.02083301544189453,0.4622564911842346,0.03798997402191162,0.4688354730606079,0.3002449870109558,-0.006493508815765381,0.4901959896087647,-0.4818224012851715,0.2904409766197205,-0.4916909039020538,0.03553897142410278,-0.2548485100269318,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 235, 105, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 313, 105, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 391, 105, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 1, 209, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 79, 209, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0],
+				["images/player-sheet0.png", 182529, 157, 209, 76, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4868420958518982, -0.05882352963089943]],[-0.2483550012111664,-0.1973040103912354,-0.001644998788833618,-0.4865196049213409,0.2351970076560974,-0.1875,0.2384870052337647,0.02083301544189453,0.46875,0.03798997402191162,0.4753289818763733,0.3002449870109558,0,0.4901959896087647,-0.4753288924694061,0.2904409766197205,-0.4851973950862885,0.03553897142410278,-0.2483550012111664,0.02573502063751221],0]
+			]
+			]
+,			[
+			"TiltLeft",
+			12,
+			true,
+			1,
+			0,
+			false,
+			19,
+			[
+				["images/player-sheet0.png", 182529, 235, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet0.png", 182529, 309, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet0.png", 182529, 383, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet0.png", 182529, 1, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet0.png", 182529, 75, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet0.png", 182529, 149, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet0.png", 182529, 223, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet0.png", 182529, 297, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet0.png", 182529, 371, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet1.png", 159259, 1, 1, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet1.png", 159259, 75, 1, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet1.png", 159259, 149, 1, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet1.png", 159259, 223, 1, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet1.png", 159259, 297, 1, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0],
+				["images/player-sheet1.png", 159259, 371, 1, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.4861111044883728, -0.05882352963089943]],[-0.2552080154418945,-0.1875,-0.01215299963951111,-0.4889706075191498,0.2309029698371887,-0.1924020051956177,0.2309029698371887,0.008578002452850342,0.4670140147209168,0.03063702583312988,0.4774309992790222,0.297793984413147,0,0.4901959896087647,-0.4670138955116272,0.3026959896087647,-0.4704861044883728,0.03553897142410278,-0.2586809992790222,0.003675997257232666],0]
+			]
+			]
+,			[
+			"TiltRight",
+			12,
+			true,
+			1,
+			0,
+			false,
+			20,
+			[
+				["images/player-sheet1.png", 159259, 1, 105, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 75, 105, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 149, 105, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 223, 105, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 297, 105, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 371, 105, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 1, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 75, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 149, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 223, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 297, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 371, 209, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 1, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 75, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0],
+				["images/player-sheet1.png", 159259, 149, 313, 72, 102, 1, 0.5, 0.5,[["Imagepoint 1", 0.5, -0.05882352963089943]],[-0.2309029996395111,-0.1825979948043823,0.008680999279022217,-0.4938725531101227,0.2447919845581055,-0.1899510025978088,0.2517359852790833,0.01102900505065918,0.4635419845581055,0.03308802843093872,0.4600690007209778,0.2928919792175293,0,0.4901959896087647,-0.4809027910232544,0.2953429818153381,-0.4739583134651184,0.03553897142410278,-0.2378470003604889,0.01348000764846802],0]
+			]
+			]
+		],
+		[
+		[
+			"BoundToLayout",
+			cr.behaviors.bound,
+			17
+		]
+		],
+		false,
+		false,
+		15,
+		[],
+		null
+	]
+,	[
+		"t10",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		2,
 		0,
 		null,
 		[
@@ -19536,37 +20906,29 @@ cr.getProjectModel = function() { return [
 			1,
 			0,
 			false,
-			490863992287454,
+			24,
 			[
-				["images/nnube3-sheet0.png", 4576, 0, 0, 204, 91, 1, 0.5, 0.5054945349693298,[],[],0]
+				["images/playerlaser-sheet0.png", 1944, 0, 0, 52, 27, 1, 0.5, 0.5185185074806213,[],[0,-0.1111115217208862,0.3269230127334595,-0.1851855218410492,0.4230769872665405,-0.03703752160072327,0.3269230127334595,0.1481484770774841,0,0.03703749179840088,-0.03846201300621033,-0.03703752160072327],0]
 			]
 			]
 		],
 		[
-		],
-		false,
-		false,
-		7822656107139206,
-		[],
-		null
-	]
-,	[
-		"t10",
-		cr.plugins_.Touch,
-		false,
-		[],
-		0,
-		0,
-		null,
-		null,
 		[
+			"Bullet",
+			cr.behaviors.Bullet,
+			22
+		]
+,		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			23
+		]
 		],
 		false,
 		false,
-		8824941227982103,
+		21,
 		[],
 		null
-		,[1]
 	]
 ,	[
 		"t11",
@@ -19579,14 +20941,21 @@ cr.getProjectModel = function() { return [
 		[
 			[
 			"Default",
-			5,
+			40,
 			false,
 			1,
 			0,
 			false,
-			2082684067584491,
+			26,
 			[
-				["images/sprite2-sheet0.png", 878, 0, 0, 250, 250, 1, 0.5, 0.5,[],[],0]
+				["images/gunflare-sheet0.png", 51327, 1, 1, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/gunflare-sheet0.png", 51327, 67, 1, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/gunflare-sheet0.png", 51327, 133, 1, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/gunflare-sheet0.png", 51327, 1, 67, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/gunflare-sheet0.png", 51327, 67, 67, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/gunflare-sheet0.png", 51327, 133, 67, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/gunflare-sheet0.png", 51327, 1, 133, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/gunflare-sheet0.png", 51327, 67, 133, 64, 64, 1, 0.5, 0.5,[],[],0]
 			]
 			]
 		],
@@ -19594,7 +20963,7 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		4591916227890423,
+		25,
 		[],
 		null
 	]
@@ -19602,7 +20971,7 @@ cr.getProjectModel = function() { return [
 		"t12",
 		cr.plugins_.Sprite,
 		false,
-		[],
+		[28],
 		0,
 		0,
 		null,
@@ -19614,9 +20983,9 @@ cr.getProjectModel = function() { return [
 			1,
 			0,
 			false,
-			1605327526587789,
+			29,
 			[
-				["images/darriba-sheet0.png", 372, 0, 0, 250, 250, 1, 0.5, 0.5,[],[],0]
+				["images/enemyspawner-sheet0.png", 169, 0, 0, 36, 37, 1, 0.5, 0.5135135054588318,[],[],0]
 			]
 			]
 		],
@@ -19624,7 +20993,7 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		8548191682976609,
+		27,
 		[],
 		null
 	]
@@ -19633,28 +21002,53 @@ cr.getProjectModel = function() { return [
 		cr.plugins_.Sprite,
 		false,
 		[],
-		0,
+		2,
 		0,
 		null,
 		[
 			[
 			"Default",
-			5,
-			false,
+			12,
+			true,
 			1,
 			0,
 			false,
-			7255471348637176,
+			33,
 			[
-				["images/darriba-sheet0.png", 372, 0, 0, 250, 250, 1, 0.5, 0.5,[],[],0]
+				["images/enemybullet-sheet0.png", 24690, 1, 1, 32, 32, 1, 0.5, 0.5,[],[-0.21875,-0.21875,0,-0.3125,0.21875,-0.21875,0.3125,0,0.21875,0.21875,0,0.28125,-0.1875,0.1874999403953552,-0.28125,0],0],
+				["images/enemybullet-sheet0.png", 24690, 35, 1, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet0.png", 24690, 69, 1, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet0.png", 24690, 1, 35, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet0.png", 24690, 35, 35, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet0.png", 24690, 69, 35, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet0.png", 24690, 1, 69, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet0.png", 24690, 35, 69, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet0.png", 24690, 69, 69, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet1.png", 19172, 1, 1, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet1.png", 19172, 35, 1, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet1.png", 19172, 69, 1, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet1.png", 19172, 1, 35, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet1.png", 19172, 35, 35, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet1.png", 19172, 69, 35, 32, 32, 1, 0.5, 0.5,[],[],0],
+				["images/enemybullet-sheet1.png", 19172, 1, 69, 32, 32, 1, 0.5, 0.5,[],[],0]
 			]
 			]
 		],
 		[
+		[
+			"Bullet",
+			cr.behaviors.Bullet,
+			31
+		]
+,		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			32
+		]
 		],
 		false,
 		false,
-		2031871152368768,
+		30,
 		[],
 		null
 	]
@@ -19662,29 +21056,54 @@ cr.getProjectModel = function() { return [
 		"t14",
 		cr.plugins_.Sprite,
 		false,
-		[],
-		0,
+		[35],
+		2,
 		0,
 		null,
 		[
 			[
 			"Default",
-			5,
-			false,
+			15,
+			true,
 			1,
 			0,
 			false,
-			2749719226747498,
+			38,
 			[
-				["images/darriba-sheet0.png", 372, 0, 0, 250, 250, 1, 0.5, 0.5,[],[],0]
+				["images/bladeenemy-sheet1.png", 61190, 1, 75, 70, 70, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 77, 77, 72, 72, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 151, 77, 72, 72, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 1, 1, 74, 74, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet1.png", 61190, 73, 75, 70, 70, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 77, 151, 72, 72, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 151, 151, 72, 72, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 77, 1, 74, 74, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet1.png", 61190, 145, 75, 70, 70, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 1, 153, 72, 72, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet1.png", 61190, 1, 1, 72, 72, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 153, 1, 74, 74, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet1.png", 61190, 1, 147, 70, 70, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet1.png", 61190, 75, 1, 72, 72, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet1.png", 61190, 149, 1, 72, 72, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0],
+				["images/bladeenemy-sheet0.png", 77771, 1, 77, 74, 74, 1, 0.5, 0.5,[],[-0.3472220003604889,-0.3472220003604889,0,-0.4861111044883728,0.3472219705581665,-0.3472220003604889,0.4861109852790833,0,0.3472219705581665,0.3472219705581665,0,0.4861109852790833,-0.3472220003604889,0.3472219705581665,-0.4722222089767456,0],0]
 			]
 			]
 		],
 		[
+		[
+			"Bullet",
+			cr.behaviors.Bullet,
+			36
+		]
+,		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			37
+		]
 		],
 		false,
 		false,
-		1109807012896629,
+		34,
 		[],
 		null
 	]
@@ -19699,14 +21118,418 @@ cr.getProjectModel = function() { return [
 		[
 			[
 			"Default",
+			20,
+			false,
+			1,
+			0,
+			false,
+			40,
+			[
+				["images/explosion2-sheet0.png", 34780, 1, 1, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/explosion2-sheet0.png", 34780, 67, 1, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/explosion2-sheet0.png", 34780, 133, 1, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/explosion2-sheet0.png", 34780, 1, 67, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/explosion2-sheet0.png", 34780, 67, 67, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/explosion2-sheet0.png", 34780, 133, 67, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/explosion2-sheet0.png", 34780, 1, 133, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/explosion2-sheet0.png", 34780, 67, 133, 64, 64, 1, 0.5, 0.5,[],[],0],
+				["images/explosion2-sheet0.png", 34780, 133, 133, 64, 64, 1, 0.5, 0.5,[],[],0]
+			]
+			]
+		],
+		[
+		],
+		false,
+		false,
+		39,
+		[],
+		null
+	]
+,	[
+		"t16",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		0,
+		0,
+		null,
+		[
+			[
+			"Default",
+			15,
+			false,
+			1,
+			0,
+			false,
+			42,
+			[
+				["images/explosion3-sheet0.png", 326146, 1, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 195, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 389, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 583, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 777, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 1, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 195, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 389, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 583, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 777, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 1, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 195, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 389, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 583, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 777, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 1, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 195, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 389, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 583, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 777, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 1, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 195, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 389, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 583, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet0.png", 326146, 777, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 1, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 195, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 389, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 583, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 777, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 1, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 195, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 389, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 583, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 777, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 1, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 195, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 389, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 583, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 777, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 1, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 195, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 389, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 583, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 777, 583, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 1, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 195, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 389, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 583, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet1.png", 279778, 777, 777, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 1, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 195, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 389, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 583, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 777, 1, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 1, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 195, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 389, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 583, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 777, 195, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 1, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 195, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 389, 389, 192, 192, 1, 0.5, 0.5,[],[],0],
+				["images/explosion3-sheet2.png", 96713, 583, 389, 192, 192, 1, 0.5, 0.5,[],[],0]
+			]
+			]
+		],
+		[
+		],
+		false,
+		false,
+		41,
+		[],
+		null
+	]
+,	[
+		"t17",
+		cr.plugins_.TiledBg,
+		false,
+		[],
+		1,
+		0,
+		["images/healthbar.png", 156, 0],
+		null,
+		[
+		[
+			"Anchor",
+			cr.behaviors.Anchor,
+			44
+		]
+		],
+		false,
+		false,
+		43,
+		[],
+		null
+	]
+,	[
+		"t18",
+		cr.plugins_.TiledBg,
+		false,
+		[],
+		1,
+		0,
+		["images/healthbg.png", 152, 0],
+		null,
+		[
+		[
+			"Anchor",
+			cr.behaviors.Anchor,
+			46
+		]
+		],
+		false,
+		false,
+		45,
+		[],
+		null
+	]
+,	[
+		"t19",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		1,
+		0,
+		null,
+		[
+			[
+			"Default",
 			5,
 			false,
 			1,
 			0,
 			false,
-			7106449491402654,
+			49,
 			[
-				["images/darriba-sheet0.png", 372, 0, 0, 250, 250, 1, 0.5, 0.5,[],[],0]
+				["images/enemyspawner-sheet0.png", 169, 0, 0, 36, 37, 1, 0.5, 0.5135135054588318,[],[],0]
+			]
+			]
+		],
+		[
+		[
+			"Bullet",
+			cr.behaviors.Bullet,
+			48
+		]
+		],
+		false,
+		false,
+		47,
+		[],
+		null
+	]
+,	[
+		"t20",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		2,
+		0,
+		null,
+		[
+			[
+			"Default",
+			15,
+			true,
+			1,
+			0,
+			false,
+			53,
+			[
+				["images/spikeyenemy-sheet0.png", 73251, 153, 1, 78, 67, 1, 0.5, 0.5074626803398132,[],[-0.34375,-0.343528687953949,0,-0.4746757745742798,0.34375,-0.343528687953949,0.4374999403953552,-0.01565968990325928,0.34375,0.3286033272743225,0,0.4597502946853638,-0.34375,0.3286033272743225,-0.4375,-0.01565968990325928],0],
+				["images/spikeyenemy-sheet0.png", 73251, 1, 1, 74, 73, 1, 0.5, 0.5068492889404297,[],[-0.34375,-0.3429152965545654,0,-0.4740623831748962,0.34375,-0.3429152965545654,0.4374999403953552,-0.01504629850387573,0.34375,0.3292167186737061,0,0.4603636860847473,-0.34375,0.3292167186737061,-0.4375,-0.01504629850387573],0],
+				["images/spikeyenemy-sheet0.png", 73251, 145, 141, 66, 69, 1, 0.5, 0.5072463750839233,[],[-0.34375,-0.3433123826980591,0,-0.4744594693183899,0.34375,-0.3433123826980591,0.4374999403953552,-0.01544338464736939,0.34375,0.3288196325302124,0,0.4599665999412537,-0.34375,0.3288196325302124,-0.4375,-0.01544338464736939],0],
+				["images/spikeyenemy-sheet0.png", 73251, 1, 76, 70, 67, 1, 0.5, 0.5074626803398132,[],[-0.34375,-0.343528687953949,0,-0.4746757745742798,0.34375,-0.343528687953949,0.4374999403953552,-0.01565968990325928,0.34375,0.3286033272743225,0,0.4597502946853638,-0.34375,0.3286033272743225,-0.4375,-0.01565968990325928],0],
+				["images/spikeyenemy-sheet0.png", 73251, 1, 145, 68, 65, 1, 0.5, 0.5076923370361328,[],[-0.34375,-0.3437583446502686,0,-0.4749054312705994,0.34375,-0.3437583446502686,0.4374999403953552,-0.01588934659957886,0.34375,0.3283736705780029,0,0.4595206379890442,-0.34375,0.3283736705780029,-0.4375,-0.01588934659957886],0],
+				["images/spikeyenemy-sheet1.png", 42771, 67, 1, 64, 61, 1, 0.5, 0.5081967115402222,[],[-0.34375,-0.3442627191543579,0,-0.4754098057746887,0.34375,-0.3442627191543579,0.4374999403953552,-0.01639372110366821,0.34375,0.3278692960739136,0,0.4590162634849548,-0.34375,0.3278692960739136,-0.4375,-0.01639372110366821],0],
+				["images/spikeyenemy-sheet1.png", 42771, 193, 62, 56, 59, 1, 0.5, 0.508474588394165,[],[-0.34375,-0.3445405960083008,0,-0.4756876826286316,0.34375,-0.3445405960083008,0.4374999403953552,-0.01667159795761108,0.34375,0.3275914192199707,0,0.458738386631012,-0.34375,0.3275914192199707,-0.4375,-0.01667159795761108],0],
+				["images/spikeyenemy-sheet1.png", 42771, 133, 1, 58, 61, 1, 0.5, 0.5081967115402222,[],[-0.34375,-0.3442627191543579,0,-0.4754098057746887,0.34375,-0.3442627191543579,0.4374999403953552,-0.01639372110366821,0.34375,0.3278692960739136,0,0.4590162634849548,-0.34375,0.3278692960739136,-0.4375,-0.01639372110366821],0],
+				["images/spikeyenemy-sheet1.png", 42771, 123, 64, 60, 53, 1, 0.5, 0.5094339847564697,[],[-0.34375,-0.3454999923706055,0,-0.4766470789909363,0.34375,-0.3454999923706055,0.4374999403953552,-0.01763099431991577,0.34375,0.326632022857666,0,0.4577789902687073,-0.34375,0.326632022857666,-0.4375,-0.01763099431991577],0],
+				["images/spikeyenemy-sheet1.png", 42771, 193, 1, 58, 59, 1, 0.5, 0.508474588394165,[],[-0.34375,-0.3445405960083008,0,-0.4756876826286316,0.34375,-0.3445405960083008,0.4374999403953552,-0.01667159795761108,0.34375,0.3275914192199707,0,0.458738386631012,-0.34375,0.3275914192199707,-0.4375,-0.01667159795761108],0],
+				["images/spikeyenemy-sheet1.png", 42771, 67, 64, 54, 61, 1, 0.5, 0.5081967115402222,[],[-0.34375,-0.3442627191543579,0,-0.4754098057746887,0.34375,-0.3442627191543579,0.4374999403953552,-0.01639372110366821,0.34375,0.3278692960739136,0,0.4590162634849548,-0.34375,0.3278692960739136,-0.4375,-0.01639372110366821],0],
+				["images/spikeyenemy-sheet1.png", 42771, 1, 1, 64, 62, 1, 0.5, 0.5,[],[-0.34375,-0.3360660076141357,0,-0.4672130942344666,0.34375,-0.3360660076141357,0.4374999403953552,-0.008197009563446045,0.34375,0.3360660076141357,0,0.467212975025177,-0.34375,0.3360660076141357,-0.4375,-0.008197009563446045],0],
+				["images/spikeyenemy-sheet0.png", 73251, 71, 149, 68, 64, 1, 0.5, 0.5,[],[-0.34375,-0.3360660076141357,0,-0.4672130942344666,0.34375,-0.3360660076141357,0.4374999403953552,-0.008197009563446045,0.34375,0.3360660076141357,0,0.467212975025177,-0.34375,0.3360660076141357,-0.4375,-0.008197009563446045],0],
+				["images/spikeyenemy-sheet0.png", 73251, 153, 70, 70, 69, 1, 0.5, 0.5072463750839233,[],[-0.34375,-0.3433123826980591,0,-0.4744594693183899,0.34375,-0.3433123826980591,0.4374999403953552,-0.01544338464736939,0.34375,0.3288196325302124,0,0.4599665999412537,-0.34375,0.3288196325302124,-0.4375,-0.01544338464736939],0],
+				["images/spikeyenemy-sheet0.png", 73251, 77, 74, 66, 73, 1, 0.5, 0.5068492889404297,[],[-0.34375,-0.3429152965545654,0,-0.4740623831748962,0.34375,-0.3429152965545654,0.4374999403953552,-0.01504629850387573,0.34375,0.3292167186737061,0,0.4603636860847473,-0.34375,0.3292167186737061,-0.4375,-0.01504629850387573],0],
+				["images/spikeyenemy-sheet0.png", 73251, 77, 1, 74, 71, 1, 0.5, 0.5070422291755676,[],[-0.34375,-0.3431082367897034,0,-0.4742553234100342,0.34375,-0.3431082367897034,0.4374999403953552,-0.01523923873901367,0.34375,0.3290237784385681,0,0.4601707458496094,-0.34375,0.3290237784385681,-0.4375,-0.01523923873901367],0]
+			]
+			]
+		],
+		[
+		[
+			"Bullet",
+			cr.behaviors.Bullet,
+			51
+		]
+,		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			52
+		]
+		],
+		false,
+		false,
+		50,
+		[],
+		null
+	]
+,	[
+		"t21",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		2,
+		0,
+		null,
+		[
+			[
+			"Default",
+			5,
+			false,
+			1,
+			0,
+			false,
+			57,
+			[
+				["images/playerrocket-sheet0.png", 1027, 0, 0, 32, 14, 1, 0.5, 0.5,[],[-0.4707030951976776,-0.4330357015132904,0,-0.2857140004634857,0.34375,-0.1428569853305817,0.40625,0,0.34375,0.1428570151329041,0,0.2857139706611633,-0.4667969048023224,0.4241070151329041,-0.40625,0],0]
+			]
+			]
+		],
+		[
+		[
+			"Bullet",
+			cr.behaviors.Bullet,
+			55
+		]
+,		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			56
+		]
+		],
+		false,
+		false,
+		54,
+		[],
+		null
+	]
+,	[
+		"t22",
+		cr.plugins_.Text,
+		false,
+		[],
+		1,
+		0,
+		null,
+		null,
+		[
+		[
+			"Anchor",
+			cr.behaviors.Anchor,
+			59
+		]
+		],
+		false,
+		false,
+		58,
+		[],
+		null
+	]
+,	[
+		"t23",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		2,
+		0,
+		null,
+		[
+			[
+			"Default",
+			5,
+			false,
+			1,
+			0,
+			false,
+			63,
+			[
+				["images/rocketpowerup-sheet0.png", 1080, 0, 0, 32, 32, 1, 0.5, 0.5,[],[-0.130858987569809,-0.2324219942092896,0,-0.4375,0.1191409826278687,-0.2480469942092896,0.125,0,0.1933590173721314,0.4316409826278687,-0.1855469942092896,0.4316409826278687,-0.125,0],0]
+			]
+			]
+		],
+		[
+		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			61
+		]
+,		[
+			"Rotate",
+			cr.behaviors.Rotate,
+			62
+		]
+		],
+		false,
+		false,
+		60,
+		[],
+		null
+	]
+,	[
+		"t24",
+		cr.plugins_.TiledBg,
+		false,
+		[],
+		1,
+		0,
+		["images/rocketsdisplay.png", 1039, 0],
+		null,
+		[
+		[
+			"Anchor",
+			cr.behaviors.Anchor,
+			65
+		]
+		],
+		false,
+		false,
+		64,
+		[],
+		null
+	]
+,	[
+		"t25",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		0,
+		0,
+		null,
+		[
+			[
+			"Default",
+			12,
+			true,
+			1,
+			0,
+			false,
+			67,
+			[
+				["images/playerthrust-sheet0.png", 81721, 1, 1, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 67, 1, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 133, 1, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 199, 1, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 265, 1, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 331, 1, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 397, 1, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 1, 131, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 67, 131, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 133, 131, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 199, 131, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 265, 131, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 331, 131, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 397, 131, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 1, 261, 64, 128, 1, 0.5, 0.5,[],[],0],
+				["images/playerthrust-sheet0.png", 81721, 67, 261, 64, 128, 1, 0.5, 0.5,[],[],0]
 			]
 			]
 		],
@@ -19714,30 +21537,334 @@ cr.getProjectModel = function() { return [
 		],
 		false,
 		false,
-		2466320681169876,
+		66,
+		[],
+		null
+	]
+,	[
+		"t26",
+		cr.plugins_.Sprite,
+		false,
+		[69],
+		1,
+		0,
+		null,
+		[
+			[
+			"Default",
+			20,
+			true,
+			1,
+			0,
+			false,
+			71,
+			[
+				["images/bugenemy-sheet1.png", 49017, 1, 81, 60, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet1.png", 49017, 63, 81, 60, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet1.png", 49017, 1, 1, 62, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet1.png", 49017, 65, 1, 62, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 69, 161, 64, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 141, 81, 66, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 1, 1, 68, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 71, 1, 68, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 141, 1, 68, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 1, 81, 68, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 71, 81, 68, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 1, 161, 66, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet0.png", 65232, 135, 161, 64, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet1.png", 49017, 129, 1, 62, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet1.png", 49017, 193, 1, 62, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0],
+				["images/bugenemy-sheet1.png", 49017, 125, 81, 60, 78, 1, 0.5, 0.5,[],[-0.4000000059604645,-0.4230768978595734,0,-0.474359005689621,0.3999999761581421,-0.4230768978595734,0.3999999761581421,0,0.2166669964790344,0.2820510268211365,0,0.4743589758872986,-0.2166669964790344,0.2820510268211365,-0.4000000059604645,0],0]
+			]
+			]
+		],
+		[
+		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			70
+		]
+		],
+		false,
+		false,
+		68,
+		[],
+		null
+	]
+,	[
+		"t27",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		2,
+		0,
+		null,
+		[
+			[
+			"Default",
+			5,
+			false,
+			1,
+			0,
+			false,
+			75,
+			[
+				["images/enemylaser-sheet0.png", 1301, 0, 0, 52, 26, 1, 0.5, 0.5,[],[-0.3076919913291931,-0.1153849959373474,0,-0.3076919913291931,0.3461539745330811,-0.1923080086708069,0.4230769872665405,0,0.3269230127334595,0.153846025466919,0,0.3076919913291931,-0.2884619832038879,0.07692301273345947,-0.3461540043354034,0],0]
+			]
+			]
+		],
+		[
+		[
+			"Bullet",
+			cr.behaviors.Bullet,
+			73
+		]
+,		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			74
+		]
+		],
+		false,
+		false,
+		72,
+		[],
+		null
+	]
+,	[
+		"t28",
+		cr.plugins_.Sprite,
+		false,
+		[77,78,79,80,81],
+		1,
+		0,
+		null,
+		[
+			[
+			"Default",
+			10,
+			true,
+			1,
+			0,
+			false,
+			83,
+			[
+				["images/fighterenemy-sheet0.png", 222794, 1, 1, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 103, 1, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 205, 1, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 307, 1, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 409, 1, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 1, 98, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 103, 98, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 205, 98, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 307, 98, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 409, 98, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 1, 195, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 103, 195, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 205, 195, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 307, 195, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 409, 195, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0],
+				["images/fighterenemy-sheet0.png", 222794, 1, 292, 100, 95, 1, 0.5, 0.5052631497383118,[],[-0.4925000071525574,-0.3184211552143097,0,-0.4947368502616882,0.4725000262260437,-0.3131581544876099,0.4874999523162842,0.05526286363601685,0.002500057220458984,0.4947368502616882,-0.4975000023841858,0.07105284929275513],0]
+			]
+			]
+		],
+		[
+		[
+			"DestroyOutsideLayout",
+			cr.behaviors.destroy,
+			82
+		]
+		],
+		false,
+		false,
+		76,
+		[],
+		null
+	]
+,	[
+		"t29",
+		cr.plugins_.Keyboard,
+		false,
+		[],
+		0,
+		0,
+		null,
+		null,
+		[
+		],
+		false,
+		false,
+		84,
+		[],
+		null
+		,[]
+	]
+,	[
+		"t30",
+		cr.plugins_.Text,
+		false,
+		[],
+		0,
+		0,
+		null,
+		null,
+		[
+		],
+		false,
+		false,
+		85,
+		[],
+		null
+	]
+,	[
+		"t31",
+		cr.plugins_.Touch,
+		false,
+		[],
+		0,
+		0,
+		null,
+		null,
+		[
+		],
+		false,
+		false,
+		86,
+		[],
+		null
+		,[1]
+	]
+,	[
+		"t32",
+		cr.plugins_.Sprite,
+		false,
+		[],
+		2,
+		0,
+		null,
+		[
+			[
+			"Default",
+			5,
+			false,
+			1,
+			0,
+			false,
+			90,
+			[
+				["images/rocketbutton-sheet0.png", 3896, 0, 0, 50, 45, 1, 0.5, 0.5111111402511597,[],[],0]
+			]
+			]
+		],
+		[
+		[
+			"Anchor",
+			cr.behaviors.Anchor,
+			88
+		]
+,		[
+			"Flash",
+			cr.behaviors.Flash,
+			89
+		]
+		],
+		false,
+		false,
+		87,
+		[],
+		null
+	]
+,	[
+		"t33",
+		cr.plugins_.Audio,
+		false,
+		[],
+		0,
+		0,
+		null,
+		null,
+		[
+		],
+		false,
+		false,
+		91,
+		[],
+		null
+		,[0,0,1,1,600,600,10000,1,5000,1]
+	]
+,	[
+		"t34",
+		cr.plugins_.Text,
+		false,
+		[],
+		0,
+		0,
+		null,
+		null,
+		[
+		],
+		false,
+		false,
+		92,
+		[],
+		null
+	]
+,	[
+		"t35",
+		cr.plugins_.Browser,
+		false,
+		[],
+		0,
+		0,
+		null,
+		null,
+		[
+		],
+		false,
+		false,
+		93,
+		[],
+		null
+		,[]
+	]
+,	[
+		"t36",
+		cr.plugins_.Sprite,
+		true,
+		[],
+		0,
+		0,
+		null,
+		null,
+		[
+		],
+		false,
+		false,
+		5008010868559932,
 		[],
 		null
 	]
 	],
 	[
+		[36,14,26,28,20]
 	],
 	[
 	[
-		"Layout 1",
-		300,
-		200,
+		"Safari Audio Title",
+		1280,
+		1024,
 		false,
-		"Event sheet 1",
-		8384498624412158,
+		"Safari Audio Title events",
+		94,
 		[
 		[
-			"fondo",
+			"Layer 0",
 			0,
-			9715302911287372,
+			95,
 			true,
-			[255, 255, 255],
-			true,
-			0.2000000029802322,
+			[0, 0, 0],
+			false,
+			1,
 			1,
 			1,
 			false,
@@ -19746,24 +21873,60 @@ cr.getProjectModel = function() { return [
 			0,
 			[
 			[
-				[381, 147, 0, 810, 304, 0, 0, 1, 0.5, 0.5, 0, 0, []],
-				5,
-				5,
+				[349, 519, 0, 545, 355, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				34,
+				0,
 				[
 				],
 				[
 				],
 				[
+					"Please touch the screen to begin.",
 					0,
-					"Default",
+					"36pt Arial",
+					"rgb(192,192,192)",
+					1,
+					1,
+					1,
 					0,
-					1
+					0
 				]
 			]
-,			[
-				[116, 162, 0, 103, 55, 0, 0, 1, 0.5, 0.5054945349693298, 0, 0, []],
-				9,
+			],
+			[			]
+		]
+		],
+		[
+		],
+		[]
+	]
+,	[
+		"Title",
+		1280,
+		1024,
+		true,
+		"Title events",
+		96,
+		[
+		[
+			"Background",
+			0,
+			97,
+			true,
+			[0, 0, 0],
+			true,
+			1,
+			1,
+			1,
+			false,
+			1,
+			0,
+			0,
+			[
+			[
+				[318, 496, 0, 1024, 1024, 0, 0, 1, 0.5, 0.5, 0, 0, []],
 				6,
+				1,
 				[
 				],
 				[
@@ -19776,39 +21939,9 @@ cr.getProjectModel = function() { return [
 				]
 			]
 ,			[
-				[227, 51, 0, 103, 55, 0, 0, 1, 0.5, 0.5054945349693298, 0, 0, []],
-				9,
-				7,
-				[
-				],
-				[
-				],
-				[
-					0,
-					"Default",
-					0,
-					1
-				]
-			]
-,			[
-				[283, 148, 0, 103, 55, 0, 0, 1, 0.5, 0.5054945349693298, 0, 0, []],
-				9,
-				8,
-				[
-				],
-				[
-				],
-				[
-					0,
-					"Default",
-					0,
-					1
-				]
-			]
-,			[
-				[362, 71, 0, 103, 55, 0, 0, 1, 0.5, 0.5054945349693298, 0, 0, []],
-				9,
-				9,
+				[317, 360, 0, 449, 231, 0, 0, 1, 0.5011135935783386, 0.5021644830703735, 0, 0, []],
+				3,
+				2,
 				[
 				],
 				[
@@ -19824,9 +21957,9 @@ cr.getProjectModel = function() { return [
 			[			]
 		]
 ,		[
-			"juego",
-			2,
-			4779827951489626,
+			"Layer 0",
+			1,
+			98,
 			true,
 			[255, 255, 255],
 			true,
@@ -19839,62 +21972,103 @@ cr.getProjectModel = function() { return [
 			0,
 			[
 			[
-				[84, 83, 0, -116.0001220703125, 71.50025939941406, 0, 0, 1, 0.5, 0.5010752677917481, 0, 0, []],
-				2,
+				[46, 521, 0, 539, 56, 0, 0.03281698375940323, 1, 0, 0, 0, 0, []],
 				0,
-				[
-				],
-				[
-				[
-					200,
-					600,
-					500,
-					2,
-					0,
-					1,
-					1
-				],
-				[
-					1
-				]
-				],
-				[
-					0,
-					"Default",
-					0,
-					1
-				]
-			]
-,			[
-				[322, 267, 0, 48, 43, 0, 0, 1, 0.5, 0.5, 0, 0, []],
 				3,
-				1,
 				[
 				],
 				[
 				],
 				[
+					"TOUCH TO BEGIN",
 					0,
-					"Default",
-					0,
-					1
-				]
-			]
-,			[
-				[110.5, -27.5, 0, 23, 19, 0, 0, 1, 0.5, 0.5, 0, 0, []],
-				4,
-				4,
-				[
-				],
-				[
-				[
-					400,
-					0,
-					0,
+					"bold 24pt Arial Black",
+					"rgb(255,255,153)",
 					1,
 					0,
-					1
+					0,
+					0,
+					0
 				]
+			]
+,			[
+				[200, 758, 0, 284, 30, 0, -0.04758108779788017, 0.2000000029802322, 0, 0, 0, 0, []],
+				1,
+				4,
+				[
+				],
+				[
+				],
+				[
+					"Scirra Game Studios - www.scirra.com",
+					0,
+					"italic 12pt Arial",
+					"rgb(255,255,255)",
+					0,
+					0,
+					0,
+					0,
+					0
+				]
+			]
+,			[
+				[129, 475, 0, 391, 56, 0, -0.03022576123476028, 0.6000000238418579, 0, 0, 0, 0, []],
+				1,
+				5,
+				[
+				],
+				[
+				],
+				[
+					"AS USUAL, EARTH IS UNDER ATTACK.  CAN YOU SAVE ALL MANKIND... BEFORE TEA-TIME?",
+					0,
+					"bold 12pt Arial",
+					"rgb(255,255,255)",
+					1,
+					0,
+					0,
+					0,
+					0
+				]
+			]
+			],
+			[			]
+		]
+		],
+		[
+		],
+		[]
+	]
+,	[
+		"Game",
+		1024,
+		5120,
+		false,
+		"Game events",
+		99,
+		[
+		[
+			"Background",
+			0,
+			100,
+			true,
+			[0, 0, 0],
+			true,
+			1,
+			1,
+			1,
+			false,
+			1,
+			0,
+			0,
+			[
+			[
+				[512, 4608, 0, 1024, 1024, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				4,
+				6,
+				[
+				],
+				[
 				],
 				[
 					0,
@@ -19904,8 +22078,86 @@ cr.getProjectModel = function() { return [
 				]
 			]
 ,			[
-				[59.49974060058594, 164.0000152587891, 0, 34, 34, 0, 0, 1, 0.5, 0.5, 0, 0, []],
-				12,
+				[512, 3585, 0, 1024, 1024, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				5,
+				7,
+				[
+				],
+				[
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[512, 2562, 0, 1024, 1024, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				6,
+				8,
+				[
+				],
+				[
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[512, 1539, 0, 1024, 1024, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				4,
+				9,
+				[
+				],
+				[
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[512, 516, 0, 1024, 1024, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				7,
+				10,
+				[
+				],
+				[
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+			],
+			[			]
+		]
+,		[
+			"Game",
+			1,
+			101,
+			true,
+			[255, 255, 255],
+			true,
+			1,
+			1,
+			1,
+			false,
+			1,
+			0,
+			0,
+			[
+			[
+				[-197, 4632, 0, 128, 128, 0, 0, 1, 0.5, 0.5, 1, 0, []],
+				8,
 				11,
 				[
 				],
@@ -19919,12 +22171,22 @@ cr.getProjectModel = function() { return [
 				]
 			]
 ,			[
-				[94.99984741210938, 196.7500762939453, 0, 31.49967956542969, 35.49996948242188, 0, 0, 1, 0.5, 0.5, 0, 0, []],
-				13,
+				[-214, 4802, 0, 52, 27, 0, 0, 1, 0.5, 0.5185185074806213, 1, 0, []],
+				10,
 				12,
 				[
 				],
 				[
+				[
+					800,
+					0,
+					0,
+					0,
+					1,
+					1
+				],
+				[
+				]
 				],
 				[
 					0,
@@ -19934,8 +22196,8 @@ cr.getProjectModel = function() { return [
 				]
 			]
 ,			[
-				[24.25005340576172, 195.0001525878906, 0, 31.99990844726563, 40.99996948242188, 0, 0, 1, 0.5, 0.5, 0, 0, []],
-				14,
+				[-170, 4856, 0, 64, 64, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				11,
 				13,
 				[
 				],
@@ -19949,12 +22211,2271 @@ cr.getProjectModel = function() { return [
 				]
 			]
 ,			[
-				[58.50020599365234, 215.7501373291016, 0, 30.50001525878906, 39.50006103515625, 0, 0, 1, 0.5, 0.5, 0, 0, []],
-				15,
+				[522, 4664, 0, 36, 37, 0, -1.570799946784973, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				19,
 				14,
 				[
 				],
 				[
+				[
+					10,
+					0,
+					0,
+					0,
+					1,
+					1
+				]
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[-89, 4725, 0, 64, 64, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				15,
+				15,
+				[
+				],
+				[
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[-152, 4047, 0, 42, 35, 0, 1.134009957313538, 1, 0.5, 0.5074626803398132, 0, 0, []],
+				20,
+				16,
+				[
+				],
+				[
+				[
+					100,
+					0,
+					0,
+					0,
+					1,
+					1
+				],
+				[
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[-147, 3981, 0, 70, 70, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				14,
+				17,
+				[
+					[7]
+				],
+				[
+				[
+					50,
+					10,
+					0,
+					0,
+					1,
+					1
+				],
+				[
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[501, 5042, 0, 48, 96, 0, 0, 1, 0.5, 0.5, 1, 0, []],
+				25,
+				18,
+				[
+				],
+				[
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[501, 4959, 0, 76, 102, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				9,
+				19,
+				[
+					[500]
+				],
+				[
+				[
+					1
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[594, 3945, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				20,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[-187, 4177, 0, 60, 78, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				26,
+				21,
+				[
+					[5]
+				],
+				[
+				[
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[-203, 4237, 0, 52, 26, 0, 0, 1, 0.5, 0.5, 1, 0, []],
+				27,
+				22,
+				[
+				],
+				[
+				[
+					350,
+					0,
+					0,
+					0,
+					1,
+					1
+				],
+				[
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3496, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				23,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[240, 3319, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				24,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[400, 3339, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				25,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[700, 3299, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				26,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[920, 3359, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				27,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3279, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				28,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3145, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				29,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3116, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				30,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3176, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				31,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3086, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				32,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 2636, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				33,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 2626, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				34,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 2616, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				35,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 2606, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				36,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 2596, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				37,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 2586, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				38,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 2576, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				39,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 2566, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				40,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[-304, 3464, 0, 100, 95, 0, 0, 1, 0.5, 0.5052631497383118, 0, 0, []],
+				28,
+				41,
+				[
+					[0],
+					[0],
+					[0],
+					[0],
+					[15]
+				],
+				[
+				[
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[481, 2202, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				42,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[400, 1965, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				43,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[560, 1847, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				23,
+				44,
+				[
+				],
+				[
+				[
+				],
+				[
+					180,
+					0
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[121, 1611, 0, 658, 30, 0, 0, 0.6000000238418579, 0, 0, 0, 0, []],
+				30,
+				45,
+				[
+				],
+				[
+				],
+				[
+					"You won! :P Try downloading the Construct 2 project for this game to see how it was made...",
+					0,
+					"italic 12pt Arial",
+					"rgb(255,255,255)",
+					0,
+					0,
+					0,
+					0,
+					0
+				]
+			]
+			],
+			[			]
+		]
+,		[
+			"FX",
+			2,
+			102,
+			true,
+			[255, 255, 255],
+			true,
+			1,
+			1,
+			1,
+			false,
+			1,
+			0,
+			0,
+			[
+			],
+			[			]
+		]
+,		[
+			"UI",
+			3,
+			103,
+			true,
+			[255, 255, 255],
+			true,
+			0,
+			0,
+			1,
+			false,
+			1,
+			0,
+			0,
+			[
+			[
+				[3, 23, 0, 150, 51, 0, 0, 0.5, 0, 0, 0, 0, []],
+				22,
+				46,
+				[
+				],
+				[
+				[
+					0,
+					0,
+					0,
+					0,
+					1
+				]
+				],
+				[
+					"Text",
+					0,
+					"bold 26pt Arial",
+					"rgb(255,255,0)",
+					1,
+					0,
+					0,
+					0,
+					0
+				]
+			]
+,			[
+				[380, 4076, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				47,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[700, 4016, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				48,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3956, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				49,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[660, 3936, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				50,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[360, 3776, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				51,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3776, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				52,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[660, 3776, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				53,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[260, 3856, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				54,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[620, 3836, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				55,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[-180, 4940, 0, 32, 32, 0, 0, 1, 0.5, 0.5, 0, 0, []],
+				13,
+				56,
+				[
+				],
+				[
+				[
+					250,
+					0,
+					0,
+					0,
+					1,
+					1
+				],
+				[
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[360, 3696, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				57,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3696, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				58,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[660, 3696, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				59,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[380, 3676, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				60,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[540, 3676, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				61,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[680, 3676, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				62,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[340, 3656, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				63,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[500, 3656, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				64,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[640, 3656, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				65,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[380, 3636, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				66,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[540, 3636, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				67,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[680, 3636, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				68,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[340, 3616, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				69,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[500, 3616, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				70,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[640, 3616, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				71,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[360, 3596, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				72,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[520, 3596, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				73,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[660, 3596, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				74,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[-289.1570129394531, 4939.66015625, 0, 192, 192, 0, 0, 1, 0.5, 0.5, 1, 0, []],
+				16,
+				75,
+				[
+				],
+				[
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[2, 9, 0, 152, 10, 0, 0, 0.4000000059604645, 0, 0, 0, 0, []],
+				18,
+				76,
+				[
+				],
+				[
+				[
+					0,
+					0,
+					0,
+					0,
+					1
+				]
+				],
+				[
+					0,
+					0
+				]
+			]
+,			[
+				[3, 10, 0, 150, 8, 0, 0, 1, 0, 0, 0, 0, []],
+				17,
+				77,
+				[
+				],
+				[
+				[
+					0,
+					0,
+					0,
+					0,
+					1
+				]
+				],
+				[
+					0,
+					0
+				]
+			]
+,			[
+				[-161, 4726, 0, 32, 14, 0, -1.570799946784973, 1, 0.5, 0.5, 0, 0, []],
+				21,
+				78,
+				[
+				],
+				[
+				[
+					0,
+					1500,
+					0,
+					0,
+					1,
+					1
+				],
+				[
+				]
+				],
+				[
+					0,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[159, 0, 0, 48, 30, 0, 0, 1, 0, 0, 0, 0, []],
+				24,
+				79,
+				[
+				],
+				[
+				[
+					0,
+					0,
+					0,
+					0,
+					1
+				]
+				],
+				[
+					0,
+					0
+				]
+			]
+,			[
+				[400, 3516, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				80,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[500, 3436, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				81,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[400, 3416, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				82,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[600, 3416, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				83,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[340, 3236, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				84,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[560, 3236, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				85,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[760, 3236, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				86,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[240, 3196, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				87,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[500, 3196, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				88,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[700, 3196, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				89,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[160, 3076, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				90,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[440, 3076, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				91,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[740, 3076, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				92,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[160, 3036, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				93,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[448, 2992, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				94,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[740, 3036, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				95,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[500, 2936, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				96,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[500, 2926, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				97,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[500, 2916, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				98,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[500, 2906, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				99,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[160, 2768, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				100,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[192, 2754, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				101,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[224, 2741, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				102,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[256, 2730, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				103,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[288, 2723, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				104,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[240, 2486, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				105,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[600, 2476, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				106,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[440, 2496, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				107,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[240, 2456, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				108,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[600, 2446, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				109,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[440, 2466, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				110,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[240, 2426, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				111,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[600, 2416, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				112,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[440, 2436, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				113,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[240, 2396, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				114,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[600, 2386, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				115,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[440, 2406, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				116,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[240, 2366, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				117,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[600, 2356, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				118,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[440, 2376, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				119,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[240, 2336, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				120,
+				[
+					["3Bugs"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[600, 2326, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				121,
+				[
+					["4Blades"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[440, 2346, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				122,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[438, 2189, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				123,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[379, 2104, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				124,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[670, 2092, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				125,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[474, 2009, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				126,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[471, 2004, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				127,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[603, 1961, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				128,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[599, 1956, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				129,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[521, 1931, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				130,
+				[
+					["9Spikey"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[517, 1926, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				131,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[338, 1849, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				132,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[486, 1829, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				133,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[625, 1808, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				134,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[339, 1710, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				135,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[486, 1708, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				136,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[628, 1706, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				137,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[777, 1704, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				138,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[202, 1712, 0, 36, 37, 0, 0, 1, 0.5, 0.5135135054588318, 0, 0, []],
+				12,
+				139,
+				[
+					["Fighter"]
+				],
+				[
+				],
+				[
+					1,
+					"Default",
+					0,
+					1
+				]
+			]
+,			[
+				[64, 891, 0, 96.48292541503906, 86.19141387939453, 0, 0, 0.3300000131130219, 0.5, 0.5111111402511597, 0, 0, []],
+				32,
+				140,
+				[
+				],
+				[
+				[
+					0,
+					1,
+					0,
+					0,
+					1
+				],
+				[
+				]
 				],
 				[
 					0,
@@ -19974,14 +24495,7058 @@ cr.getProjectModel = function() { return [
 	],
 	[
 	[
-		"Event sheet 1",
+		"Game events",
+		[
+		[
+			1,
+			"Score",
+			0,
+			0,
+false,false,104,false
+		]
+,		[
+			1,
+			"Rockets",
+			0,
+			3,
+false,false,105,false
+		]
+,		[
+			1,
+			"startTime",
+			0,
+			0,
+false,false,106,false
+		]
+,		[
+			1,
+			"FirstRun",
+			0,
+			0,
+false,false,107,false
+		]
+,		[
+			0,
+			[true, "Touch control"],
+			false,
+			null,
+			108,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.IsGroupActive,
+				null,
+				0,
+				false,
+				false,
+				false,
+				108,
+				false
+				,[
+				[
+					1,
+					[
+						2,
+						"Touch control"
+					]
+				]
+				]
+			]
+			],
+			[
+			]
+			,[
+			[
+				0,
+				null,
+				false,
+				null,
+				8716363293371203,
+				[
+				[
+					31,
+					cr.plugins_.Touch.prototype.cnds.IsInTouch,
+					null,
+					0,
+					false,
+					false,
+					false,
+					109,
+					false
+				]
+,				[
+					31,
+					cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
+					null,
+					0,
+					false,
+					true,
+					false,
+					110,
+					false
+					,[
+					[
+						4,
+						32
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.cnds.Compare,
+					null,
+					0,
+					false,
+					false,
+					false,
+					111,
+					false
+					,[
+					[
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.distance
+							,[
+[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+,[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+,[
+								20,
+								31,
+								cr.plugins_.Touch.prototype.exps.X,
+								false,
+								null
+							]
+,[
+								20,
+								31,
+								cr.plugins_.Touch.prototype.exps.Y,
+								false,
+								null
+							]
+							]
+						]
+					]
+,					[
+						8,
+						4
+					]
+,					[
+						7,
+						[
+							6,
+							[
+								0,
+								300
+							]
+							,[
+								19,
+								cr.system_object.prototype.exps.dt
+							]
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.MoveAtAngle,
+					null,
+					112,
+					false
+					,[
+					[
+						0,
+						[
+							19,
+							cr.system_object.prototype.exps.angle
+							,[
+[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+,[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+,[
+								20,
+								31,
+								cr.plugins_.Touch.prototype.exps.X,
+								false,
+								null
+							]
+,[
+								20,
+								31,
+								cr.plugins_.Touch.prototype.exps.Y,
+								false,
+								null
+							]
+							]
+						]
+					]
+,					[
+						0,
+						[
+							6,
+							[
+								0,
+								300
+							]
+							,[
+								19,
+								cr.system_object.prototype.exps.dt
+							]
+						]
+					]
+					]
+				]
+,				[
+					33,
+					cr.plugins_.Audio.prototype.acts.SetVolume,
+					null,
+					113,
+					false
+					,[
+					[
+						1,
+						[
+							2,
+							"jet"
+						]
+					]
+,					[
+						0,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+				]
+				,[
+				[
+					0,
+					null,
+					false,
+					null,
+					6803767573970454,
+					[
+					[
+						9,
+						cr.plugins_.Sprite.prototype.cnds.CompareX,
+						null,
+						0,
+						false,
+						false,
+						false,
+						114,
+						false
+						,[
+						[
+							8,
+							2
+						]
+,						[
+							0,
+							[
+								20,
+								31,
+								cr.plugins_.Touch.prototype.exps.X,
+								false,
+								null
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						9,
+						cr.plugins_.Sprite.prototype.acts.SetAnim,
+						null,
+						115,
+						false
+						,[
+						[
+							1,
+							[
+								2,
+								"TiltRight"
+							]
+						]
+,						[
+							3,
+							0
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					5124919194001522,
+					[
+					[
+						9,
+						cr.plugins_.Sprite.prototype.cnds.CompareX,
+						null,
+						0,
+						false,
+						false,
+						false,
+						116,
+						false
+						,[
+						[
+							8,
+							4
+						]
+,						[
+							0,
+							[
+								20,
+								31,
+								cr.plugins_.Touch.prototype.exps.X,
+								false,
+								null
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						9,
+						cr.plugins_.Sprite.prototype.acts.SetAnim,
+						null,
+						117,
+						false
+						,[
+						[
+							1,
+							[
+								2,
+								"Tiltleft"
+							]
+						]
+,						[
+							3,
+							0
+						]
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				7939076744981841,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.Else,
+					null,
+					0,
+					false,
+					false,
+					false,
+					118,
+					false
+				]
+,				[
+					9,
+					cr.plugins_.Sprite.prototype.cnds.IsAnimPlaying,
+					null,
+					0,
+					false,
+					true,
+					false,
+					119,
+					false
+					,[
+					[
+						1,
+						[
+							2,
+							"Default"
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					33,
+					cr.plugins_.Audio.prototype.acts.SetVolume,
+					null,
+					120,
+					false
+					,[
+					[
+						1,
+						[
+							2,
+							"jet"
+						]
+					]
+,					[
+						0,
+						[
+							0,
+							-60
+						]
+					]
+					]
+				]
+,				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.SetAnim,
+					null,
+					121,
+					false
+					,[
+					[
+						1,
+						[
+							2,
+							"Default"
+						]
+					]
+,					[
+						3,
+						0
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				8584200213496671,
+				[
+				[
+					31,
+					cr.plugins_.Touch.prototype.cnds.OnTouchObject,
+					null,
+					1,
+					false,
+					false,
+					false,
+					122,
+					false
+					,[
+					[
+						4,
+						32
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.cnds.CompareVar,
+					null,
+					0,
+					false,
+					false,
+					false,
+					123,
+					false
+					,[
+					[
+						11,
+						"Rockets"
+					]
+,					[
+						8,
+						4
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.Spawn,
+					null,
+					124,
+					false
+					,[
+					[
+						4,
+						21
+					]
+,					[
+						5,
+						[
+							2,
+							"Game"
+						]
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					21,
+					cr.plugins_.Sprite.prototype.acts.SetAngle,
+					null,
+					125,
+					false
+					,[
+					[
+						0,
+						[
+							0,
+							270
+						]
+					]
+					]
+				]
+,				[
+					21,
+					cr.plugins_.Sprite.prototype.acts.SetX,
+					null,
+					126,
+					false
+					,[
+					[
+						0,
+						[
+							4,
+							[
+								20,
+								21,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+							,[
+								0,
+								35
+							]
+						]
+					]
+					]
+				]
+,				[
+					21,
+					cr.plugins_.Sprite.prototype.acts.Spawn,
+					null,
+					127,
+					false
+					,[
+					[
+						4,
+						15
+					]
+,					[
+						5,
+						[
+							2,
+							"Game"
+						]
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.Spawn,
+					null,
+					128,
+					false
+					,[
+					[
+						4,
+						21
+					]
+,					[
+						5,
+						[
+							2,
+							"Game"
+						]
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					21,
+					cr.plugins_.Sprite.prototype.acts.SetAngle,
+					null,
+					129,
+					false
+					,[
+					[
+						0,
+						[
+							0,
+							270
+						]
+					]
+					]
+				]
+,				[
+					21,
+					cr.plugins_.Sprite.prototype.acts.SetX,
+					null,
+					130,
+					false
+					,[
+					[
+						0,
+						[
+							5,
+							[
+								20,
+								21,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+							,[
+								0,
+								35
+							]
+						]
+					]
+					]
+				]
+,				[
+					21,
+					cr.plugins_.Sprite.prototype.acts.Spawn,
+					null,
+					131,
+					false
+					,[
+					[
+						4,
+						15
+					]
+,					[
+						5,
+						[
+							2,
+							"Game"
+						]
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.acts.SubVar,
+					null,
+					132,
+					false
+					,[
+					[
+						11,
+						"Rockets"
+					]
+,					[
+						7,
+						[
+							0,
+							1
+						]
+					]
+					]
+				]
+,				[
+					32,
+					cr.behaviors.Flash.prototype.acts.Flash,
+					"Flash",
+					133,
+					false
+					,[
+					[
+						0,
+						[
+							1,
+							0.1
+						]
+					]
+,					[
+						0,
+						[
+							1,
+							0.1
+						]
+					]
+,					[
+						0,
+						[
+							1,
+							1
+						]
+					]
+					]
+				]
+,				[
+					33,
+					cr.plugins_.Audio.prototype.acts.Play,
+					null,
+					134,
+					false
+					,[
+					[
+						2,
+						["tronblast1",false]
+					]
+,					[
+						3,
+						0
+					]
+,					[
+						0,
+						[
+							0,
+							0
+						]
+					]
+,					[
+						1,
+						[
+							2,
+							""
+						]
+					]
+					]
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			[true, "Player and general"],
+			false,
+			null,
+			135,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.IsGroupActive,
+				null,
+				0,
+				false,
+				false,
+				false,
+				135,
+				false
+				,[
+				[
+					1,
+					[
+						2,
+						"Player and general"
+					]
+				]
+				]
+			]
+			],
+			[
+			]
+			,[
+			[
+				0,
+				null,
+				false,
+				null,
+				1454381688018742,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.OnLayoutStart,
+					null,
+					1,
+					false,
+					false,
+					false,
+					136,
+					false
+				]
+				],
+				[
+				[
+					11,
+					cr.plugins_.Sprite.prototype.acts.Destroy,
+					null,
+					137,
+					false
+				]
+,				[
+					33,
+					cr.plugins_.Audio.prototype.acts.Play,
+					null,
+					138,
+					false
+					,[
+					[
+						2,
+						["squaremotif1",false]
+					]
+,					[
+						3,
+						0
+					]
+,					[
+						0,
+						[
+							0,
+							0
+						]
+					]
+,					[
+						1,
+						[
+							2,
+							""
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.acts.Wait,
+					null,
+					139,
+					false
+					,[
+					[
+						0,
+						[
+							1,
+							1
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.acts.SetVar,
+					null,
+					140,
+					false
+					,[
+					[
+						11,
+						"Rockets"
+					]
+,					[
+						7,
+						[
+							0,
+							3
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.acts.SetVar,
+					null,
+					141,
+					false
+					,[
+					[
+						11,
+						"startTime"
+					]
+,					[
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.time
+						]
+					]
+					]
+				]
+				]
+				,[
+				[
+					0,
+					null,
+					false,
+					null,
+					5191995455550128,
+					[
+					[
+						-1,
+						cr.system_object.prototype.cnds.CompareVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						142,
+						false
+						,[
+						[
+							11,
+							"FirstRun"
+						]
+,						[
+							8,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						143,
+						false
+						,[
+						[
+							2,
+							["mattoglseby - 3",true]
+						]
+,						[
+							3,
+							1
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								"music"
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.SetVar,
+						null,
+						144,
+						false
+						,[
+						[
+							11,
+							"FirstRun"
+						]
+,						[
+							7,
+							[
+								0,
+								1
+							]
+						]
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				9383946689588557,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.OnLayoutStart,
+					null,
+					1,
+					false,
+					false,
+					false,
+					145,
+					false
+				]
+				],
+				[
+				[
+					33,
+					cr.plugins_.Audio.prototype.acts.Play,
+					null,
+					146,
+					false
+					,[
+					[
+						2,
+						["jetloop1",false]
+					]
+,					[
+						3,
+						1
+					]
+,					[
+						0,
+						[
+							0,
+							-60
+						]
+					]
+,					[
+						1,
+						[
+							2,
+							"jet"
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				7293731984141288,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.Compare,
+					null,
+					0,
+					false,
+					false,
+					false,
+					147,
+					false
+					,[
+					[
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.time
+						]
+					]
+,					[
+						8,
+						4
+					]
+,					[
+						7,
+						[
+							4,
+							[
+								23,
+								"startTime"
+							]
+							,[
+								0,
+								3
+							]
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.cnds.Compare,
+					null,
+					0,
+					false,
+					false,
+					false,
+					148,
+					false
+					,[
+					[
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.viewporttop
+							,[
+[
+								2,
+								"Game"
+							]
+							]
+						]
+					]
+,					[
+						8,
+						4
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					9,
+					cr.plugins_.Sprite.prototype.cnds.CompareY,
+					null,
+					0,
+					false,
+					false,
+					false,
+					149,
+					false
+					,[
+					[
+						8,
+						4
+					]
+,					[
+						0,
+						[
+							19,
+							cr.system_object.prototype.exps.viewportbottom
+							,[
+[
+								2,
+								"Game"
+							]
+							]
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.SetY,
+					null,
+					150,
+					false
+					,[
+					[
+						0,
+						[
+							19,
+							cr.system_object.prototype.exps.viewportbottom
+							,[
+[
+								2,
+								"Game"
+							]
+							]
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				2509464019115189,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.Compare,
+					null,
+					0,
+					false,
+					false,
+					false,
+					151,
+					false
+					,[
+					[
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.time
+						]
+					]
+,					[
+						8,
+						4
+					]
+,					[
+						7,
+						[
+							4,
+							[
+								23,
+								"startTime"
+							]
+							,[
+								0,
+								3
+							]
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.cnds.Compare,
+					null,
+					0,
+					false,
+					false,
+					false,
+					152,
+					false
+					,[
+					[
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.viewporttop
+							,[
+[
+								2,
+								"Game"
+							]
+							]
+						]
+					]
+,					[
+						8,
+						4
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					9,
+					cr.plugins_.Sprite.prototype.cnds.CompareY,
+					null,
+					0,
+					false,
+					false,
+					false,
+					153,
+					false
+					,[
+					[
+						8,
+						2
+					]
+,					[
+						0,
+						[
+							20,
+							19,
+							cr.plugins_.Sprite.prototype.exps.Y,
+							false,
+							null
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.SetY,
+					null,
+					154,
+					false
+					,[
+					[
+						0,
+						[
+							20,
+							19,
+							cr.plugins_.Sprite.prototype.exps.Y,
+							false,
+							null
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				270274405319525,
+				[
+				[
+					36,
+					cr.plugins_.Sprite.prototype.cnds.CompareY,
+					null,
+					0,
+					false,
+					false,
+					false,
+					155,
+					false
+					,[
+					[
+						8,
+						2
+					]
+,					[
+						0,
+						[
+							20,
+							9,
+							cr.plugins_.Sprite.prototype.exps.Y,
+							false,
+							null
+						]
+					]
+					]
+				]
+,				[
+					36,
+					cr.plugins_.Sprite.prototype.cnds.IsOnScreen,
+					null,
+					0,
+					false,
+					false,
+					false,
+					156,
+					false
+				]
+,				[
+					-1,
+					cr.system_object.prototype.cnds.Every,
+					null,
+					0,
+					false,
+					false,
+					false,
+					157,
+					false
+					,[
+					[
+						0,
+						[
+							1,
+							0.1
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.Spawn,
+					null,
+					158,
+					false
+					,[
+					[
+						4,
+						10
+					]
+,					[
+						5,
+						[
+							2,
+							"FX"
+						]
+					]
+,					[
+						7,
+						[
+							0,
+							1
+						]
+					]
+					]
+				]
+,				[
+					10,
+					cr.plugins_.Sprite.prototype.acts.SetAngle,
+					null,
+					159,
+					false
+					,[
+					[
+						0,
+						[
+							0,
+							270
+						]
+					]
+					]
+				]
+,				[
+					10,
+					cr.plugins_.Sprite.prototype.acts.Spawn,
+					null,
+					160,
+					false
+					,[
+					[
+						4,
+						11
+					]
+,					[
+						5,
+						[
+							2,
+							"Game"
+						]
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					11,
+					cr.plugins_.Sprite.prototype.acts.SetAngle,
+					null,
+					161,
+					false
+					,[
+					[
+						0,
+						[
+							19,
+							cr.system_object.prototype.exps.random
+							,[
+[
+								0,
+								360
+							]
+							]
+						]
+					]
+					]
+				]
+,				[
+					33,
+					cr.plugins_.Audio.prototype.acts.Play,
+					null,
+					162,
+					false
+					,[
+					[
+						2,
+						["lazer fire 1",false]
+					]
+,					[
+						3,
+						0
+					]
+,					[
+						0,
+						[
+							0,
+							0
+						]
+					]
+,					[
+						1,
+						[
+							2,
+							""
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				2413735101213299,
+				[
+				[
+					10,
+					cr.plugins_.Sprite.prototype.cnds.CompareY,
+					null,
+					0,
+					false,
+					false,
+					false,
+					163,
+					false
+					,[
+					[
+						8,
+						2
+					]
+,					[
+						0,
+						[
+							5,
+							[
+								19,
+								cr.system_object.prototype.exps.viewporttop
+								,[
+[
+									2,
+									"Game"
+								]
+								]
+							]
+							,[
+								0,
+								80
+							]
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					10,
+					cr.plugins_.Sprite.prototype.acts.Destroy,
+					null,
+					164,
+					false
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				8497866579443441,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.Compare,
+					null,
+					0,
+					false,
+					false,
+					false,
+					165,
+					false
+					,[
+					[
+						7,
+						[
+							20,
+							9,
+							cr.plugins_.Sprite.prototype.exps.Count,
+							false,
+							null
+						]
+					]
+,					[
+						8,
+						4
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					-1,
+					cr.system_object.prototype.acts.Scroll,
+					null,
+					166,
+					false
+					,[
+					[
+						0,
+						[
+							20,
+							9,
+							cr.plugins_.Sprite.prototype.exps.X,
+							false,
+							null
+						]
+					]
+,					[
+						0,
+						[
+							20,
+							19,
+							cr.plugins_.Sprite.prototype.exps.Y,
+							false,
+							null
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				5111543154680596,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.EveryTick,
+					null,
+					0,
+					false,
+					false,
+					false,
+					167,
+					false
+				]
+				],
+				[
+				[
+					11,
+					cr.plugins_.Sprite.prototype.acts.SetPos,
+					null,
+					168,
+					false
+					,[
+					[
+						0,
+						[
+							20,
+							9,
+							cr.plugins_.Sprite.prototype.exps.X,
+							false,
+							null
+						]
+					]
+,					[
+						0,
+						[
+							5,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+							,[
+								0,
+								50
+							]
+						]
+					]
+					]
+				]
+,				[
+					22,
+					cr.plugins_.Text.prototype.acts.SetText,
+					null,
+					169,
+					false
+					,[
+					[
+						7,
+						[
+							23,
+							"Score"
+						]
+					]
+					]
+				]
+,				[
+					17,
+					cr.plugins_.TiledBg.prototype.acts.SetWidth,
+					null,
+					170,
+					false
+					,[
+					[
+						0,
+						[
+							6,
+							[
+								7,
+								[
+									21,
+									9,
+									false,
+									null
+									,0
+								]
+								,[
+									0,
+									500
+								]
+							]
+							,[
+								0,
+								150
+							]
+						]
+					]
+					]
+				]
+,				[
+					25,
+					cr.plugins_.Sprite.prototype.acts.SetPos,
+					null,
+					171,
+					false
+					,[
+					[
+						0,
+						[
+							20,
+							9,
+							cr.plugins_.Sprite.prototype.exps.X,
+							false,
+							null
+						]
+					]
+,					[
+						0,
+						[
+							4,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+							,[
+								0,
+								85
+							]
+						]
+					]
+					]
+				]
+,				[
+					24,
+					cr.plugins_.TiledBg.prototype.acts.SetWidth,
+					null,
+					172,
+					false
+					,[
+					[
+						0,
+						[
+							6,
+							[
+								23,
+								"Rockets"
+							]
+							,[
+								0,
+								16
+							]
+						]
+					]
+					]
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			[true, "Enemies"],
+			false,
+			null,
+			173,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.IsGroupActive,
+				null,
+				0,
+				false,
+				false,
+				false,
+				173,
+				false
+				,[
+				[
+					1,
+					[
+						2,
+						"Enemies"
+					]
+				]
+				]
+			]
+			],
+			[
+			]
+			,[
+			[
+				0,
+				[true, "BladeEnemy"],
+				false,
+				null,
+				174,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.IsGroupActive,
+					null,
+					0,
+					false,
+					false,
+					false,
+					174,
+					false
+					,[
+					[
+						1,
+						[
+							2,
+							"BladeEnemy"
+						]
+					]
+					]
+				]
+				],
+				[
+				]
+				,[
+				[
+					0,
+					null,
+					false,
+					null,
+					9402534322395931,
+					[
+					[
+						10,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						175,
+						false
+						,[
+						[
+							4,
+							14
+						]
+						]
+					]
+					],
+					[
+					[
+						10,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						176,
+						false
+						,[
+						[
+							4,
+							15
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						15,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						177,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						10,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						178,
+						false
+					]
+,					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						179,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								1
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						180,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								1
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						181,
+						false
+						,[
+						[
+							2,
+							["lazer ricochet",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					8873846590440457,
+					[
+					[
+						21,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						182,
+						false
+						,[
+						[
+							4,
+							14
+						]
+						]
+					]
+					],
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						183,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						184,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						21,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						185,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						186,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						187,
+						false
+					]
+,					[
+						21,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						188,
+						false
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						189,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								17
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						190,
+						false
+						,[
+						[
+							2,
+							["explosion 4",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					3344220462836703,
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						191,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							8,
+							3
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						192,
+						false
+						,[
+						[
+							4,
+							8
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						193,
+						false
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						194,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								10
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						195,
+						false
+						,[
+						[
+							2,
+							["explosion 1",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					4534815502905883,
+					[
+					[
+						-1,
+						cr.system_object.prototype.cnds.EveryTick,
+						null,
+						0,
+						false,
+						false,
+						false,
+						196,
+						false
+					]
+					],
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.RotateTowardPosition,
+						null,
+						197,
+						false
+						,[
+						[
+							0,
+							[
+								6,
+								[
+									0,
+									10
+								]
+								,[
+									19,
+									cr.system_object.prototype.exps.dt
+								]
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					5789218779720032,
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.cnds.CompareY,
+						null,
+						0,
+						false,
+						false,
+						false,
+						198,
+						false
+						,[
+						[
+							8,
+							5
+						]
+,						[
+							0,
+							[
+								4,
+								[
+									19,
+									cr.system_object.prototype.exps.viewportbottom
+									,[
+[
+										2,
+										"Game"
+									]
+									]
+								]
+								,[
+									0,
+									60
+								]
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						199,
+						false
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					6665000046841898,
+					[
+					[
+						-1,
+						cr.system_object.prototype.cnds.Compare,
+						null,
+						0,
+						false,
+						false,
+						false,
+						200,
+						false
+						,[
+						[
+							7,
+							[
+								20,
+								14,
+								cr.plugins_.Sprite.prototype.exps.Count,
+								false,
+								null
+							]
+						]
+,						[
+							8,
+							4
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.Every,
+						null,
+						0,
+						false,
+						false,
+						false,
+						201,
+						false
+						,[
+						[
+							0,
+							[
+								1,
+								1
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.PickNth,
+						null,
+						0,
+						false,
+						false,
+						false,
+						202,
+						false
+						,[
+						[
+							4,
+							14
+						]
+,						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									20,
+									14,
+									cr.plugins_.Sprite.prototype.exps.Count,
+									false,
+									null
+								]
+								]
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						203,
+						false
+						,[
+						[
+							4,
+							13
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						13,
+						cr.plugins_.Sprite.prototype.acts.SetTowardPosition,
+						null,
+						204,
+						false
+						,[
+						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						205,
+						false
+						,[
+						[
+							2,
+							["retrolaser1",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					9381846388166988,
+					[
+					[
+						13,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						206,
+						false
+						,[
+						[
+							4,
+							9
+						]
+						]
+					]
+					],
+					[
+					[
+						13,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						207,
+						false
+						,[
+						[
+							4,
+							15
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						13,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						208,
+						false
+					]
+,					[
+						9,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						209,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								10
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.SubVar,
+						null,
+						210,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								2
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						211,
+						false
+						,[
+						[
+							2,
+							["explosion 3",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					8207832188253141,
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						212,
+						false
+						,[
+						[
+							4,
+							9
+						]
+						]
+					]
+					],
+					[
+					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						213,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						214,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						215,
+						false
+					]
+,					[
+						9,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						216,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								25
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.SubVar,
+						null,
+						217,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								15
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						218,
+						false
+						,[
+						[
+							2,
+							["explosion 4",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				[true, "SpikeyEnemy"],
+				false,
+				null,
+				219,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.IsGroupActive,
+					null,
+					0,
+					false,
+					false,
+					false,
+					219,
+					false
+					,[
+					[
+						1,
+						[
+							2,
+							"SpikeyEnemy"
+						]
+					]
+					]
+				]
+				],
+				[
+				]
+				,[
+				[
+					0,
+					null,
+					false,
+					null,
+					4015547760139501,
+					[
+					[
+						10,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						220,
+						false
+						,[
+						[
+							4,
+							20
+						]
+						]
+					]
+					],
+					[
+					[
+						20,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						221,
+						false
+						,[
+						[
+							4,
+							8
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						10,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						222,
+						false
+					]
+,					[
+						20,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						223,
+						false
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						224,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								2
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						225,
+						false
+						,[
+						[
+							2,
+							["explosion 4",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					7901273154341748,
+					[
+					[
+						21,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						226,
+						false
+						,[
+						[
+							4,
+							20
+						]
+						]
+					]
+					],
+					[
+					[
+						20,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						227,
+						false
+						,[
+						[
+							4,
+							8
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						20,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						228,
+						false
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						229,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								2
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						230,
+						false
+						,[
+						[
+							2,
+							["explosion 2",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					4430708928478686,
+					[
+					[
+						20,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						231,
+						false
+						,[
+						[
+							4,
+							9
+						]
+						]
+					]
+					],
+					[
+					[
+						20,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						232,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						233,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						20,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						234,
+						false
+					]
+,					[
+						9,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						235,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								25
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.SubVar,
+						null,
+						236,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								15
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						237,
+						false
+						,[
+						[
+							2,
+							["explosion 4",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				[true, "BugEnemy"],
+				false,
+				null,
+				238,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.IsGroupActive,
+					null,
+					0,
+					false,
+					false,
+					false,
+					238,
+					false
+					,[
+					[
+						1,
+						[
+							2,
+							"BugEnemy"
+						]
+					]
+					]
+				]
+				],
+				[
+				]
+				,[
+				[
+					0,
+					null,
+					false,
+					null,
+					4246456051089197,
+					[
+					[
+						10,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						239,
+						false
+						,[
+						[
+							4,
+							26
+						]
+						]
+					]
+					],
+					[
+					[
+						10,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						240,
+						false
+						,[
+						[
+							4,
+							15
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						15,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						241,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						10,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						242,
+						false
+					]
+,					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						243,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								1
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						244,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								1
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						245,
+						false
+						,[
+						[
+							2,
+							["lazer ricochet",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					8989843740814447,
+					[
+					[
+						21,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						246,
+						false
+						,[
+						[
+							4,
+							26
+						]
+						]
+					]
+					],
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						247,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						248,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						21,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						249,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						250,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						251,
+						false
+					]
+,					[
+						21,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						252,
+						false
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						253,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								20
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						254,
+						false
+						,[
+						[
+							2,
+							["explosion 4",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					7338507273615099,
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						255,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							8,
+							3
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						256,
+						false
+						,[
+						[
+							4,
+							8
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						257,
+						false
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						258,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								15
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						259,
+						false
+						,[
+						[
+							2,
+							["explosion 1",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					4682957320753409,
+					[
+					[
+						-1,
+						cr.system_object.prototype.cnds.EveryTick,
+						null,
+						0,
+						false,
+						false,
+						false,
+						260,
+						false
+					]
+					],
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.SetY,
+						null,
+						261,
+						false
+						,[
+						[
+							0,
+							[
+								4,
+								[
+									20,
+									26,
+									cr.plugins_.Sprite.prototype.exps.Y,
+									false,
+									null
+								]
+								,[
+									6,
+									[
+										0,
+										100
+									]
+									,[
+										19,
+										cr.system_object.prototype.exps.dt
+									]
+								]
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					1078978608044163,
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.cnds.CompareY,
+						null,
+						0,
+						false,
+						false,
+						false,
+						262,
+						false
+						,[
+						[
+							8,
+							5
+						]
+,						[
+							0,
+							[
+								4,
+								[
+									19,
+									cr.system_object.prototype.exps.viewportbottom
+									,[
+[
+										2,
+										"Game"
+									]
+									]
+								]
+								,[
+									0,
+									60
+								]
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						263,
+						false
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					8052909176140787,
+					[
+					[
+						-1,
+						cr.system_object.prototype.cnds.Compare,
+						null,
+						0,
+						false,
+						false,
+						false,
+						264,
+						false
+						,[
+						[
+							7,
+							[
+								20,
+								26,
+								cr.plugins_.Sprite.prototype.exps.Count,
+								false,
+								null
+							]
+						]
+,						[
+							8,
+							4
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.Every,
+						null,
+						0,
+						false,
+						false,
+						false,
+						265,
+						false
+						,[
+						[
+							0,
+							[
+								1,
+								2
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.PickNth,
+						null,
+						0,
+						false,
+						false,
+						false,
+						266,
+						false
+						,[
+						[
+							4,
+							26
+						]
+,						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									20,
+									26,
+									cr.plugins_.Sprite.prototype.exps.Count,
+									false,
+									null
+								]
+								]
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						267,
+						false
+						,[
+						[
+							4,
+							27
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						268,
+						false
+						,[
+						[
+							2,
+							["retrolaser1",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+,					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.SetTowardPosition,
+						null,
+						269,
+						false
+						,[
+						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.Wait,
+						null,
+						270,
+						false
+						,[
+						[
+							0,
+							[
+								1,
+								0.2
+							]
+						]
+						]
+					]
+,					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						271,
+						false
+						,[
+						[
+							4,
+							27
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						272,
+						false
+						,[
+						[
+							2,
+							["retrolaser1",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+,					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.SetTowardPosition,
+						null,
+						273,
+						false
+						,[
+						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.Wait,
+						null,
+						274,
+						false
+						,[
+						[
+							0,
+							[
+								1,
+								0.2
+							]
+						]
+						]
+					]
+,					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						275,
+						false
+						,[
+						[
+							4,
+							27
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						276,
+						false
+						,[
+						[
+							2,
+							["retrolaser1",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+,					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.SetTowardPosition,
+						null,
+						277,
+						false
+						,[
+						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								9,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					1799138400245412,
+					[
+					[
+						27,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						278,
+						false
+						,[
+						[
+							4,
+							9
+						]
+						]
+					]
+					],
+					[
+					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						279,
+						false
+						,[
+						[
+							4,
+							15
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						280,
+						false
+					]
+,					[
+						9,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						281,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								10
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.SubVar,
+						null,
+						282,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								2
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						283,
+						false
+						,[
+						[
+							2,
+							["explosion 3",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					7683923286915163,
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						284,
+						false
+						,[
+						[
+							4,
+							9
+						]
+						]
+					]
+					],
+					[
+					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						285,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						286,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						26,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						287,
+						false
+					]
+,					[
+						9,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						288,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								25
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.SubVar,
+						null,
+						289,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								15
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						290,
+						false
+						,[
+						[
+							2,
+							["explosion 4",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				[true, "FighterEnemy"],
+				false,
+				null,
+				291,
+				[
+				[
+					-1,
+					cr.system_object.prototype.cnds.IsGroupActive,
+					null,
+					0,
+					false,
+					false,
+					false,
+					291,
+					false
+					,[
+					[
+						1,
+						[
+							2,
+							"FighterEnemy"
+						]
+					]
+					]
+				]
+				],
+				[
+				]
+				,[
+				[
+					0,
+					null,
+					false,
+					null,
+					7209198017771301,
+					[
+					[
+						10,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						292,
+						false
+						,[
+						[
+							4,
+							28
+						]
+						]
+					]
+					],
+					[
+					[
+						10,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						293,
+						false
+						,[
+						[
+							4,
+							15
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						15,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						294,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						10,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						295,
+						false
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						296,
+						false
+						,[
+						[
+							10,
+							4
+						]
+,						[
+							7,
+							[
+								0,
+								1
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						297,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								1
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						298,
+						false
+						,[
+						[
+							2,
+							["lazer ricochet",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					2761869095436677,
+					[
+					[
+						21,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						299,
+						false
+						,[
+						[
+							4,
+							28
+						]
+						]
+					]
+					],
+					[
+					[
+						21,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						300,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						301,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						302,
+						false
+						,[
+						[
+							10,
+							4
+						]
+,						[
+							7,
+							[
+								0,
+								10
+							]
+						]
+						]
+					]
+,					[
+						21,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						303,
+						false
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						304,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								10
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						305,
+						false
+						,[
+						[
+							2,
+							["explosion 4",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					7698895775614397,
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						306,
+						false
+						,[
+						[
+							10,
+							4
+						]
+,						[
+							8,
+							3
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						307,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						308,
+						false
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.AddVar,
+						null,
+						309,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								25
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						310,
+						false
+						,[
+						[
+							2,
+							["explosion 1",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					2875364898240341,
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						311,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							8,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.ForEach,
+						null,
+						0,
+						true,
+						false,
+						false,
+						312,
+						false
+						,[
+						[
+							4,
+							28
+						]
+						]
+					]
+					],
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
+						null,
+						313,
+						false
+						,[
+						[
+							10,
+							1
+						]
+,						[
+							7,
+							[
+								20,
+								28,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+						]
+						]
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
+						null,
+						314,
+						false
+						,[
+						[
+							10,
+							2
+						]
+,						[
+							7,
+							[
+								20,
+								28,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
+						null,
+						315,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								1
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					6429642366618753,
+					[
+					[
+						-1,
+						cr.system_object.prototype.cnds.EveryTick,
+						null,
+						0,
+						false,
+						false,
+						false,
+						316,
+						false
+					]
+					],
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.AddInstanceVar,
+						null,
+						317,
+						false
+						,[
+						[
+							10,
+							3
+						]
+,						[
+							7,
+							[
+								19,
+								cr.system_object.prototype.exps.dt
+							]
+						]
+						]
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.SetX,
+						null,
+						318,
+						false
+						,[
+						[
+							0,
+							[
+								4,
+								[
+									21,
+									28,
+									false,
+									null
+									,1
+								]
+								,[
+									6,
+									[
+										19,
+										cr.system_object.prototype.exps.cos
+										,[
+[
+											6,
+											[
+												21,
+												28,
+												false,
+												null
+												,3
+											]
+											,[
+												0,
+												90
+											]
+										]
+										]
+									]
+									,[
+										0,
+										150
+									]
+								]
+							]
+						]
+						]
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.SetY,
+						null,
+						319,
+						false
+						,[
+						[
+							0,
+							[
+								4,
+								[
+									21,
+									28,
+									false,
+									null
+									,2
+								]
+								,[
+									6,
+									[
+										19,
+										cr.system_object.prototype.exps.sin
+										,[
+[
+											6,
+											[
+												21,
+												28,
+												false,
+												null
+												,3
+											]
+											,[
+												0,
+												180
+											]
+										]
+										]
+									]
+									,[
+										0,
+										50
+									]
+								]
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					1980961363512752,
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.cnds.CompareY,
+						null,
+						0,
+						false,
+						false,
+						false,
+						320,
+						false
+						,[
+						[
+							8,
+							5
+						]
+,						[
+							0,
+							[
+								4,
+								[
+									19,
+									cr.system_object.prototype.exps.viewportbottom
+									,[
+[
+										2,
+										"Game"
+									]
+									]
+								]
+								,[
+									0,
+									60
+								]
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						321,
+						false
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					1811682387117388,
+					[
+					[
+						-1,
+						cr.system_object.prototype.cnds.Compare,
+						null,
+						0,
+						false,
+						false,
+						false,
+						322,
+						false
+						,[
+						[
+							7,
+							[
+								20,
+								28,
+								cr.plugins_.Sprite.prototype.exps.Count,
+								false,
+								null
+							]
+						]
+,						[
+							8,
+							4
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.Every,
+						null,
+						0,
+						false,
+						false,
+						false,
+						323,
+						false
+						,[
+						[
+							0,
+							[
+								1,
+								1
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.ForEach,
+						null,
+						0,
+						true,
+						false,
+						false,
+						324,
+						false
+						,[
+						[
+							4,
+							28
+						]
+						]
+					]
+					],
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						325,
+						false
+						,[
+						[
+							4,
+							27
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.SetX,
+						null,
+						326,
+						false
+						,[
+						[
+							0,
+							[
+								5,
+								[
+									20,
+									27,
+									cr.plugins_.Sprite.prototype.exps.X,
+									false,
+									null
+								]
+								,[
+									0,
+									40
+								]
+							]
+						]
+						]
+					]
+,					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						327,
+						false
+						,[
+						[
+							0,
+							[
+								0,
+								90
+							]
+						]
+						]
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						328,
+						false
+						,[
+						[
+							4,
+							27
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.SetX,
+						null,
+						329,
+						false
+						,[
+						[
+							0,
+							[
+								4,
+								[
+									20,
+									27,
+									cr.plugins_.Sprite.prototype.exps.X,
+									false,
+									null
+								]
+								,[
+									0,
+									40
+								]
+							]
+						]
+						]
+					]
+,					[
+						27,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						330,
+						false
+						,[
+						[
+							0,
+							[
+								0,
+								90
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						331,
+						false
+						,[
+						[
+							2,
+							["retrolaser2",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					8841616442334849,
+					[
+					[
+						9,
+						cr.plugins_.Sprite.prototype.cnds.OnCollision,
+						null,
+						0,
+						false,
+						false,
+						true,
+						332,
+						false
+						,[
+						[
+							4,
+							28
+						]
+						]
+					]
+					],
+					[
+					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.Spawn,
+						null,
+						333,
+						false
+						,[
+						[
+							4,
+							16
+						]
+,						[
+							5,
+							[
+								2,
+								"FX"
+							]
+						]
+,						[
+							7,
+							[
+								0,
+								0
+							]
+						]
+						]
+					]
+,					[
+						16,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						334,
+						false
+						,[
+						[
+							0,
+							[
+								19,
+								cr.system_object.prototype.exps.random
+								,[
+[
+									0,
+									360
+								]
+								]
+							]
+						]
+						]
+					]
+,					[
+						28,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						335,
+						false
+					]
+,					[
+						9,
+						cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+						null,
+						336,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							7,
+							[
+								0,
+								50
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.acts.SubVar,
+						null,
+						337,
+						false
+						,[
+						[
+							11,
+							"Score"
+						]
+,						[
+							7,
+							[
+								0,
+								25
+							]
+						]
+						]
+					]
+,					[
+						33,
+						cr.plugins_.Audio.prototype.acts.Play,
+						null,
+						338,
+						false
+						,[
+						[
+							2,
+							["explosion 4",false]
+						]
+,						[
+							3,
+							0
+						]
+,						[
+							0,
+							[
+								0,
+								0
+							]
+						]
+,						[
+							1,
+							[
+								2,
+								""
+							]
+						]
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				987701970546947,
+				[
+				[
+					9,
+					cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+					null,
+					0,
+					false,
+					false,
+					false,
+					339,
+					false
+					,[
+					[
+						10,
+						0
+					]
+,					[
+						8,
+						3
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.cnds.TriggerOnce,
+					null,
+					0,
+					false,
+					false,
+					false,
+					340,
+					false
+				]
+				],
+				[
+				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.Spawn,
+					null,
+					341,
+					false
+					,[
+					[
+						4,
+						16
+					]
+,					[
+						5,
+						[
+							2,
+							"FX"
+						]
+					]
+,					[
+						7,
+						[
+							0,
+							0
+						]
+					]
+					]
+				]
+,				[
+					33,
+					cr.plugins_.Audio.prototype.acts.Play,
+					null,
+					342,
+					false
+					,[
+					[
+						2,
+						["explosion 3",false]
+					]
+,					[
+						3,
+						0
+					]
+,					[
+						0,
+						[
+							0,
+							0
+						]
+					]
+,					[
+						1,
+						[
+							2,
+							""
+						]
+					]
+					]
+				]
+,				[
+					9,
+					cr.plugins_.Sprite.prototype.acts.Destroy,
+					null,
+					343,
+					false
+				]
+,				[
+					-1,
+					cr.system_object.prototype.acts.Wait,
+					null,
+					344,
+					false
+					,[
+					[
+						0,
+						[
+							1,
+							4
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.acts.RestartLayout,
+					null,
+					345,
+					false
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			[true, "Enemy spawning"],
+			false,
+			null,
+			346,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.IsGroupActive,
+				null,
+				0,
+				false,
+				false,
+				false,
+				346,
+				false
+				,[
+				[
+					1,
+					[
+						2,
+						"Enemy spawning"
+					]
+				]
+				]
+			]
+			],
+			[
+			]
+			,[
+			[
+				0,
+				null,
+				false,
+				null,
+				7406776314003869,
+				[
+				[
+					12,
+					cr.plugins_.Sprite.prototype.cnds.CompareY,
+					null,
+					0,
+					false,
+					false,
+					false,
+					347,
+					false
+					,[
+					[
+						8,
+						5
+					]
+,					[
+						0,
+						[
+							5,
+							[
+								5,
+								[
+									20,
+									19,
+									cr.plugins_.Sprite.prototype.exps.Y,
+									false,
+									null
+								]
+								,[
+									7,
+									[
+										5,
+										[
+											19,
+											cr.system_object.prototype.exps.viewportbottom
+											,[
+[
+												2,
+												"Game"
+											]
+											]
+										]
+										,[
+											19,
+											cr.system_object.prototype.exps.viewporttop
+											,[
+[
+												2,
+												"Game"
+											]
+											]
+										]
+									]
+									,[
+										0,
+										2
+									]
+								]
+							]
+							,[
+								0,
+								80
+							]
+						]
+					]
+					]
+				]
+,				[
+					12,
+					cr.plugins_.Sprite.prototype.cnds.CompareY,
+					null,
+					0,
+					false,
+					false,
+					false,
+					348,
+					false
+					,[
+					[
+						8,
+						2
+					]
+,					[
+						0,
+						[
+							20,
+							19,
+							cr.plugins_.Sprite.prototype.exps.Y,
+							false,
+							null
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.cnds.Compare,
+					null,
+					0,
+					false,
+					false,
+					false,
+					349,
+					false
+					,[
+					[
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.time
+						]
+					]
+,					[
+						8,
+						4
+					]
+,					[
+						7,
+						[
+							4,
+							[
+								23,
+								"startTime"
+							]
+							,[
+								0,
+								3
+							]
+						]
+					]
+					]
+				]
+,				[
+					-1,
+					cr.system_object.prototype.cnds.ForEach,
+					null,
+					0,
+					true,
+					false,
+					false,
+					350,
+					false
+					,[
+					[
+						4,
+						12
+					]
+					]
+				]
+				],
+				[
+				]
+				,[
+				[
+					0,
+					null,
+					false,
+					null,
+					3466900314144845,
+					[
+					[
+						12,
+						cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						351,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							8,
+							0
+						]
+,						[
+							7,
+							[
+								2,
+								"4Blades"
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.Repeat,
+						null,
+						0,
+						true,
+						false,
+						false,
+						352,
+						false
+						,[
+						[
+							0,
+							[
+								0,
+								4
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						-1,
+						cr.system_object.prototype.acts.CreateObject,
+						null,
+						353,
+						false
+						,[
+						[
+							4,
+							14
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							0,
+							[
+								4,
+								[
+									20,
+									12,
+									cr.plugins_.Sprite.prototype.exps.X,
+									false,
+									null
+								]
+								,[
+									6,
+									[
+										19,
+										cr.system_object.prototype.exps.loopindex
+									]
+									,[
+										0,
+										50
+									]
+								]
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								12,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+,					[
+						14,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						354,
+						false
+						,[
+						[
+							0,
+							[
+								5,
+								[
+									0,
+									135
+								]
+								,[
+									6,
+									[
+										19,
+										cr.system_object.prototype.exps.loopindex
+									]
+									,[
+										1,
+										22.5
+									]
+								]
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					7228901400506483,
+					[
+					[
+						12,
+						cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						355,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							8,
+							0
+						]
+,						[
+							7,
+							[
+								2,
+								"9Spikey"
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.Repeat,
+						null,
+						0,
+						true,
+						false,
+						false,
+						356,
+						false
+						,[
+						[
+							0,
+							[
+								0,
+								9
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						-1,
+						cr.system_object.prototype.acts.CreateObject,
+						null,
+						357,
+						false
+						,[
+						[
+							4,
+							20
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							0,
+							[
+								4,
+								[
+									20,
+									12,
+									cr.plugins_.Sprite.prototype.exps.X,
+									false,
+									null
+								]
+								,[
+									6,
+									[
+										19,
+										cr.system_object.prototype.exps.loopindex
+									]
+									,[
+										0,
+										20
+									]
+								]
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								12,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+,					[
+						20,
+						cr.plugins_.Sprite.prototype.acts.SetAngle,
+						null,
+						358,
+						false
+						,[
+						[
+							0,
+							[
+								5,
+								[
+									0,
+									135
+								]
+								,[
+									6,
+									[
+										19,
+										cr.system_object.prototype.exps.loopindex
+									]
+									,[
+										0,
+										10
+									]
+								]
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					7536849900412782,
+					[
+					[
+						12,
+						cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						359,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							8,
+							0
+						]
+,						[
+							7,
+							[
+								2,
+								"3Bugs"
+							]
+						]
+						]
+					]
+,					[
+						-1,
+						cr.system_object.prototype.cnds.Repeat,
+						null,
+						0,
+						true,
+						false,
+						false,
+						360,
+						false
+						,[
+						[
+							0,
+							[
+								0,
+								3
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						-1,
+						cr.system_object.prototype.acts.CreateObject,
+						null,
+						361,
+						false
+						,[
+						[
+							4,
+							26
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							0,
+							[
+								4,
+								[
+									20,
+									12,
+									cr.plugins_.Sprite.prototype.exps.X,
+									false,
+									null
+								]
+								,[
+									6,
+									[
+										19,
+										cr.system_object.prototype.exps.loopindex
+									]
+									,[
+										0,
+										150
+									]
+								]
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								12,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					5690647283866974,
+					[
+					[
+						12,
+						cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+						null,
+						0,
+						false,
+						false,
+						false,
+						362,
+						false
+						,[
+						[
+							10,
+							0
+						]
+,						[
+							8,
+							0
+						]
+,						[
+							7,
+							[
+								2,
+								"Fighter"
+							]
+						]
+						]
+					]
+					],
+					[
+					[
+						-1,
+						cr.system_object.prototype.acts.CreateObject,
+						null,
+						363,
+						false
+						,[
+						[
+							4,
+							28
+						]
+,						[
+							5,
+							[
+								2,
+								"Game"
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								12,
+								cr.plugins_.Sprite.prototype.exps.X,
+								false,
+								null
+							]
+						]
+,						[
+							0,
+							[
+								20,
+								12,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+						]
+						]
+					]
+					]
+				]
+,				[
+					0,
+					null,
+					false,
+					null,
+					3457925913710455,
+					[
+					],
+					[
+					[
+						12,
+						cr.plugins_.Sprite.prototype.acts.Destroy,
+						null,
+						364,
+						false
+					]
+					]
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			[true, "Misc"],
+			false,
+			null,
+			365,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.IsGroupActive,
+				null,
+				0,
+				false,
+				false,
+				false,
+				365,
+				false
+				,[
+				[
+					1,
+					[
+						2,
+						"Misc"
+					]
+				]
+				]
+			]
+			],
+			[
+			]
+			,[
+			[
+				0,
+				null,
+				false,
+				null,
+				7053245334166749,
+				[
+				[
+					9,
+					cr.plugins_.Sprite.prototype.cnds.OnCollision,
+					null,
+					0,
+					false,
+					false,
+					true,
+					366,
+					false
+					,[
+					[
+						4,
+						23
+					]
+					]
+				]
+				],
+				[
+				[
+					-1,
+					cr.system_object.prototype.acts.AddVar,
+					null,
+					367,
+					false
+					,[
+					[
+						11,
+						"Rockets"
+					]
+,					[
+						7,
+						[
+							0,
+							3
+						]
+					]
+					]
+				]
+,				[
+					23,
+					cr.plugins_.Sprite.prototype.acts.Destroy,
+					null,
+					368,
+					false
+				]
+,				[
+					33,
+					cr.plugins_.Audio.prototype.acts.Play,
+					null,
+					369,
+					false
+					,[
+					[
+						2,
+						["upgrade1",false]
+					]
+,					[
+						3,
+						0
+					]
+,					[
+						0,
+						[
+							0,
+							0
+						]
+					]
+,					[
+						1,
+						[
+							2,
+							""
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				8691586416514886,
+				[
+				[
+					23,
+					cr.plugins_.Sprite.prototype.cnds.CompareY,
+					null,
+					0,
+					false,
+					false,
+					false,
+					370,
+					false
+					,[
+					[
+						8,
+						5
+					]
+,					[
+						0,
+						[
+							5,
+							[
+								19,
+								cr.system_object.prototype.exps.viewporttop
+								,[
+[
+									2,
+									"Game"
+								]
+								]
+							]
+							,[
+								0,
+								80
+							]
+						]
+					]
+					]
+				]
+				],
+				[
+				[
+					23,
+					cr.plugins_.Sprite.prototype.acts.SetY,
+					null,
+					371,
+					false
+					,[
+					[
+						0,
+						[
+							4,
+							[
+								20,
+								23,
+								cr.plugins_.Sprite.prototype.exps.Y,
+								false,
+								null
+							]
+							,[
+								6,
+								[
+									0,
+									100
+								]
+								,[
+									19,
+									cr.system_object.prototype.exps.dt
+								]
+							]
+						]
+					]
+					]
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				9729175546626435,
+				[
+				[
+					29,
+					cr.plugins_.Keyboard.prototype.cnds.OnKey,
+					null,
+					1,
+					false,
+					false,
+					false,
+					372,
+					false
+					,[
+					[
+						9,
+						32
+					]
+					]
+				]
+				],
+				[
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				4108505705043359,
+				[
+				[
+					8,
+					cr.plugins_.Sprite.prototype.cnds.OnAnyAnimFinished,
+					null,
+					1,
+					false,
+					false,
+					false,
+					373,
+					false
+				]
+				],
+				[
+				[
+					8,
+					cr.plugins_.Sprite.prototype.acts.Destroy,
+					null,
+					374,
+					false
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				2468450829937101,
+				[
+				[
+					11,
+					cr.plugins_.Sprite.prototype.cnds.OnAnyAnimFinished,
+					null,
+					1,
+					false,
+					false,
+					false,
+					375,
+					false
+				]
+				],
+				[
+				[
+					11,
+					cr.plugins_.Sprite.prototype.acts.Destroy,
+					null,
+					376,
+					false
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				8401496105756393,
+				[
+				[
+					15,
+					cr.plugins_.Sprite.prototype.cnds.OnAnyAnimFinished,
+					null,
+					1,
+					false,
+					false,
+					false,
+					377,
+					false
+				]
+				],
+				[
+				[
+					15,
+					cr.plugins_.Sprite.prototype.acts.Destroy,
+					null,
+					378,
+					false
+				]
+				]
+			]
+,			[
+				0,
+				null,
+				false,
+				null,
+				443021990203365,
+				[
+				[
+					16,
+					cr.plugins_.Sprite.prototype.cnds.OnAnyAnimFinished,
+					null,
+					1,
+					false,
+					false,
+					false,
+					379,
+					false
+				]
+				],
+				[
+				[
+					16,
+					cr.plugins_.Sprite.prototype.acts.Destroy,
+					null,
+					380,
+					false
+				]
+				]
+			]
+			]
+		]
+		]
+	]
+,	[
+		"Title events",
 		[
 		[
 			0,
 			null,
 			false,
 			null,
-			1349839527743984,
+			8887164812399149,
 			[
 			[
 				-1,
@@ -19991,38 +31556,60 @@ cr.getProjectModel = function() { return [
 				false,
 				false,
 				false,
-				2459759632060883,
+				381,
 				false
 			]
 			],
 			[
 			[
-				1,
-				cr.plugins_.Audio.prototype.acts.Play,
+				-1,
+				cr.system_object.prototype.acts.Scroll,
 				null,
-				2206911596009848,
+				382,
 				false
 				,[
 				[
-					2,
-					["fondo",true]
-				]
-,				[
-					3,
-					1
+					0,
+					[
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.windowwidth
+						]
+						,[
+							0,
+							2
+						]
+					]
 				]
 ,				[
 					0,
 					[
-						0,
-						0
+						7,
+						[
+							19,
+							cr.system_object.prototype.exps.windowheight
+						]
+						,[
+							0,
+							2
+						]
 					]
 				]
-,				[
-					1,
+				]
+			]
+,			[
+				-1,
+				cr.system_object.prototype.acts.Wait,
+				null,
+				383,
+				false
+				,[
+				[
+					0,
 					[
-						2,
-						""
+						1,
+						1
 					]
 				]
 				]
@@ -20034,17 +31621,90 @@ cr.getProjectModel = function() { return [
 			null,
 			false,
 			null,
-			7982006701625415,
+			3423528593903181,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.Every,
+				null,
+				0,
+				false,
+				false,
+				false,
+				385,
+				false
+				,[
+				[
+					0,
+					[
+						1,
+						1
+					]
+				]
+				]
+			]
+			],
 			[
 			[
 				0,
+				cr.plugins_.Text.prototype.acts.SetVisible,
+				null,
+				386,
+				false
+				,[
+				[
+					3,
+					0
+				]
+				]
+			]
+,			[
+				-1,
+				cr.system_object.prototype.acts.Wait,
+				null,
+				387,
+				false
+				,[
+				[
+					0,
+					[
+						1,
+						0.3
+					]
+				]
+				]
+			]
+,			[
+				0,
+				cr.plugins_.Text.prototype.acts.SetVisible,
+				null,
+				388,
+				false
+				,[
+				[
+					3,
+					1
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			null,
+			false,
+			null,
+			9526833391532792,
+			[
+			[
+				29,
 				cr.plugins_.Keyboard.prototype.cnds.OnKey,
 				null,
 				1,
 				false,
 				false,
 				false,
-				4966042230298339,
+				389,
 				false
 				,[
 				[
@@ -20056,42 +31716,395 @@ cr.getProjectModel = function() { return [
 			],
 			[
 			[
-				2,
-				cr.plugins_.Sprite.prototype.acts.Spawn,
+				-1,
+				cr.system_object.prototype.acts.GoToLayout,
 				null,
-				482362760143447,
+				390,
+				false
+				,[
+				[
+					6,
+					"Game"
+				]
+				]
+			]
+,			[
+				33,
+				cr.plugins_.Audio.prototype.acts.Stop,
+				null,
+				391,
+				false
+				,[
+				[
+					1,
+					[
+						2,
+						"music"
+					]
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			null,
+			false,
+			null,
+			515110312713323,
+			[
+			[
+				31,
+				cr.plugins_.Touch.prototype.cnds.OnTouchStart,
+				null,
+				1,
+				false,
+				false,
+				false,
+				392,
+				false
+			]
+			],
+			[
+			[
+				-1,
+				cr.system_object.prototype.acts.GoToLayout,
+				null,
+				393,
+				false
+				,[
+				[
+					6,
+					"Game"
+				]
+				]
+			]
+,			[
+				33,
+				cr.plugins_.Audio.prototype.acts.Stop,
+				null,
+				394,
+				false
+				,[
+				[
+					1,
+					[
+						2,
+						"music"
+					]
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			null,
+			false,
+			null,
+			4537142425685493,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.EveryTick,
+				null,
+				0,
+				false,
+				false,
+				false,
+				395,
+				false
+			]
+			],
+			[
+			[
+				-1,
+				cr.system_object.prototype.acts.ScrollToObject,
+				null,
+				396,
 				false
 				,[
 				[
 					4,
-					4
+					6
+				]
+				]
+			]
+			]
+		]
+		]
+	]
+,	[
+		"Safari Audio Title events",
+		[
+		[
+			0,
+			null,
+			false,
+			null,
+			3544482002734889,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.EveryTick,
+				null,
+				0,
+				false,
+				false,
+				false,
+				397,
+				false
+			]
+			],
+			[
+			[
+				34,
+				cr.plugins_.Text.prototype.acts.SetPos,
+				null,
+				398,
+				false
+				,[
+				[
+					0,
+					[
+						7,
+						[
+							4,
+							[
+								19,
+								cr.system_object.prototype.exps.viewportleft
+								,[
+[
+									0,
+									0
+								]
+								]
+							]
+							,[
+								19,
+								cr.system_object.prototype.exps.viewportright
+								,[
+[
+									0,
+									0
+								]
+								]
+							]
+						]
+						,[
+							0,
+							2
+						]
+					]
 				]
 ,				[
-					5,
+					0,
 					[
-						0,
-						0
+						7,
+						[
+							4,
+							[
+								19,
+								cr.system_object.prototype.exps.viewporttop
+								,[
+[
+									0,
+									0
+								]
+								]
+							]
+							,[
+								19,
+								cr.system_object.prototype.exps.viewportbottom
+								,[
+[
+									0,
+									0
+								]
+								]
+							]
+						]
+						,[
+							0,
+							2
+						]
 					]
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			null,
+			true,
+			null,
+			2416777605292406,
+			[
+			[
+				-1,
+				cr.system_object.prototype.cnds.IsMobile,
+				null,
+				0,
+				false,
+				true,
+				false,
+				399,
+				false
+			]
+,			[
+				-1,
+				cr.system_object.prototype.cnds.Compare,
+				null,
+				0,
+				false,
+				false,
+				false,
+				400,
+				false
+				,[
+				[
+					7,
+					[
+						19,
+						cr.system_object.prototype.exps.find
+						,[
+[
+							20,
+							35,
+							cr.plugins_.Browser.prototype.exps.UserAgent,
+							true,
+							null
+						]
+,[
+							2,
+							"Safari"
+						]
+						]
+					]
+				]
+,				[
+					8,
+					0
 				]
 ,				[
 					7,
 					[
 						0,
+						-1
+					]
+				]
+				]
+			]
+			],
+			[
+			[
+				33,
+				cr.plugins_.Audio.prototype.acts.Play,
+				null,
+				7237524974329497,
+				false
+				,[
+				[
+					2,
+					["epicarpg",true]
+				]
+,				[
+					3,
+					1
+				]
+,				[
+					0,
+					[
+						0,
 						0
+					]
+				]
+,				[
+					1,
+					[
+						2,
+						"music"
 					]
 				]
 				]
 			]
 ,			[
+				-1,
+				cr.system_object.prototype.acts.GoToLayout,
+				null,
+				401,
+				false
+				,[
+				[
+					6,
+					"Title"
+				]
+				]
+			]
+			]
+		]
+,		[
+			0,
+			null,
+			false,
+			null,
+			6340485856788306,
+			[
+			[
+				31,
+				cr.plugins_.Touch.prototype.cnds.OnTouchStart,
+				null,
 				1,
+				false,
+				false,
+				false,
+				402,
+				false
+			]
+			],
+			[
+			[
+				33,
 				cr.plugins_.Audio.prototype.acts.Play,
 				null,
-				4785939503729997,
+				355723585534056,
 				false
 				,[
 				[
 					2,
-					["laser",true]
+					["epicarpg",true]
+				]
+,				[
+					3,
+					1
+				]
+,				[
+					0,
+					[
+						0,
+						0
+					]
+				]
+,				[
+					1,
+					[
+						2,
+						"music"
+					]
+				]
+				]
+			]
+,			[
+				33,
+				cr.plugins_.Audio.prototype.acts.Play,
+				null,
+				403,
+				false
+				,[
+				[
+					2,
+					["squaremotif1",false]
 				]
 ,				[
 					3,
@@ -20113,167 +32126,16 @@ cr.getProjectModel = function() { return [
 				]
 				]
 			]
-			]
-		]
-,		[
-			0,
-			null,
-			false,
-			null,
-			6606323854456961,
-			[
-			[
-				10,
-				cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
+,			[
+				-1,
+				cr.system_object.prototype.acts.GoToLayout,
 				null,
-				0,
-				false,
-				false,
-				false,
-				9648324887893637,
+				404,
 				false
 				,[
 				[
-					4,
-					12
-				]
-				]
-			]
-			],
-			[
-			[
-				2,
-				cr.behaviors.EightDir.prototype.acts.SimulateControl,
-				"8Direction",
-				8445473088601048,
-				false
-				,[
-				[
-					3,
-					2
-				]
-				]
-			]
-			]
-		]
-,		[
-			0,
-			null,
-			false,
-			null,
-			8150250022375756,
-			[
-			[
-				10,
-				cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
-				null,
-				0,
-				false,
-				false,
-				false,
-				4175715913424104,
-				false
-				,[
-				[
-					4,
-					15
-				]
-				]
-			]
-			],
-			[
-			[
-				2,
-				cr.behaviors.EightDir.prototype.acts.SimulateControl,
-				"8Direction",
-				2863913056026829,
-				false
-				,[
-				[
-					3,
-					3
-				]
-				]
-			]
-			]
-		]
-,		[
-			0,
-			null,
-			false,
-			null,
-			8777779687148477,
-			[
-			[
-				10,
-				cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
-				null,
-				0,
-				false,
-				false,
-				false,
-				5058016109833776,
-				false
-				,[
-				[
-					4,
-					13
-				]
-				]
-			]
-			],
-			[
-			[
-				2,
-				cr.behaviors.EightDir.prototype.acts.SimulateControl,
-				"8Direction",
-				6545926188950018,
-				false
-				,[
-				[
-					3,
-					1
-				]
-				]
-			]
-			]
-		]
-,		[
-			0,
-			null,
-			false,
-			null,
-			6119769576119152,
-			[
-			[
-				10,
-				cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
-				null,
-				0,
-				false,
-				false,
-				false,
-				8810909431263837,
-				false
-				,[
-				[
-					4,
-					14
-				]
-				]
-			]
-			],
-			[
-			[
-				2,
-				cr.behaviors.EightDir.prototype.acts.SimulateControl,
-				"8Direction",
-				7402464471780911,
-				false
-				,[
-				[
-					3,
-					0
+					6,
+					"Title"
 				]
 				]
 			]
@@ -20283,21 +32145,45 @@ cr.getProjectModel = function() { return [
 	]
 	],
 	[
+		["lazer fire 1.m4a", 8622],
+		["lazer fire 1.ogg", 12277],
+		["explosion 1.m4a", 24425],
+		["explosion 1.ogg", 22704],
+		["retrolaser1.m4a", 7774],
+		["retrolaser1.ogg", 9653],
+		["lazer ricochet.m4a", 9971],
+		["lazer ricochet.ogg", 12647],
+		["explosion 4.m4a", 38820],
+		["explosion 4.ogg", 31497],
+		["squaremotif1.m4a", 9600],
+		["squaremotif1.ogg", 12294],
+		["upgrade1.m4a", 40374],
+		["upgrade1.ogg", 34353],
+		["tronblast1.m4a", 24538],
+		["tronblast1.ogg", 22893],
+		["jetloop1.m4a", 89719],
+		["jetloop1.ogg", 76691],
+		["explosion 3.m4a", 19534],
+		["explosion 3.ogg", 18615],
+		["explosion 2.m4a", 21582],
+		["explosion 2.ogg", 20259],
+		["retrolaser2.m4a", 9949],
+		["retrolaser2.ogg", 10874]
 	],
 	"media/",
 	false,
-	400,
-	300,
+	720,
+	960,
 	4,
 	true,
 	true,
-	true,
-	"1.0.0.0",
+	false,
+	"1",
 	true,
 	false,
 	0,
 	0,
-	15,
+	145,
 	false,
 	true,
 	1,
@@ -20305,4 +32191,3 @@ cr.getProjectModel = function() { return [
 	[
 	]
 ];};
-
